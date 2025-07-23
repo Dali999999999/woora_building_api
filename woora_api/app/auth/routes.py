@@ -6,7 +6,11 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
+    # Ajout d'un log pour inspecter les données reçues
+    from flask import current_app
+    current_app.logger.debug(f'Données reçues pour l\'inscription: {data}')
     email = data.get('email')
+
     password = data.get('password')
     first_name = data.get('first_name')
     last_name = data.get('last_name')
