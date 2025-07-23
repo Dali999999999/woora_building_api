@@ -12,6 +12,10 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Définir le niveau de journalisation pour afficher les messages DEBUG
+    import logging
+    app.logger.setLevel(logging.DEBUG)
+
     db.init_app(app)
     mail.init_app(app)
     jwt.init_app(app)
