@@ -1,0 +1,9 @@
+Flask
+Flask-SQLAlchemy
+Werkzeug
+PyJWT
+python-dotenv
+Flask-Mail
+Flask-JWT-Extended
+pymysql
+gunicorn

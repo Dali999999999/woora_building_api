@@ -1,0 +1,46 @@
+
+woora_api/
+├── config.py                # Fichier pour les configurations de l'application (ex: clés API, connexion à la base de données).
+├── run.py                   # Point d'entrée principal pour lancer l'application Flask.
+├── requirements.txt         # Liste des dépendances Python du projet (Flask, SQLAlchemy, etc.).
+│
+└── app/
+    ├── __init__.py          # Initialise l'application Flask, configure les extensions et enregistre les Blueprints.
+    ├── models.py              # Définit les modèles de données (tables de la base de données) avec SQLAlchemy.
+    ├── schemas.py             # Définit les schémas de validation et de sérialisation des données (avec Marshmallow) pour les requêtes et réponses API.
+    ├── utils.py               # Fonctions utilitaires partagées à travers l'application.
+    │
+    ├── auth/                  # Module pour la gestion de l'authentification.
+    │   ├── __init__.py        # Initialisation du Blueprint d'authentification.
+    │   ├── routes.py          # Contient les routes (endpoints) comme /login, /register, /logout, /reset-password.
+    │   └── services.py        # Contient la logique métier (ex: création de tokens JWT, vérification des mots de passe).
+    │
+    ├── users/                 # Module pour la gestion des profils utilisateurs.
+    │   ├── __init__.py
+    │   ├── routes.py          # Routes pour voir et modifier les informations du profil utilisateur (/profile, /profile/edit).
+    │   └── services.py        # Logique pour la mise à jour des données utilisateur.
+    │
+    ├── properties/            # Module pour la gestion des biens immobiliers.
+    │   ├── __init__.py
+    │   ├── routes.py          # Routes pour lister, créer, voir, mettre à jour, et supprimer les biens (CRUD). Inclut la recherche et le filtrage.
+    │   └── services.py        # Logique métier liée aux biens (calculs, validations complexes, etc.).
+    │
+    ├── owners/                # Module spécifique aux fonctionnalités des propriétaires.
+    │   ├── __init__.py
+    │   ├── routes.py          # Routes pour gérer les biens d'un propriétaire, voir les demandes de visite, etc.
+    │   └── services.py        # Logique pour accepter/rejeter les visites, etc.
+    │
+    ├── agents/                # Module spécifique aux fonctionnalités des agents immobiliers.
+    │   ├── __init__.py
+    │   ├── routes.py          # Routes pour le parrainage, l'historique et le total des commissions.
+    │   └── services.py        # Logique pour le calcul des commissions et la gestion des codes de parrainage.
+    │
+    ├── customers/             # Module spécifique aux fonctionnalités des clients (chercheurs de biens).
+    │   ├── __init__.py
+    │   ├── routes.py          # Routes pour faire des demandes de visite, gérer les paiements, etc.
+    │   └── services.py        # Logique pour la gestion des visites et des paiements.
+    │
+    └── admin/                 # Module pour le panel d'administration.
+        ├── __init__.py
+        ├── routes.py          # Routes pour la gestion globale de l'application (ex: voir tous les utilisateurs, valider des biens, etc.).
+        └── services.py        # Logique métier pour les actions d'administration.
