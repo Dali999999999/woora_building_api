@@ -1,16 +1,14 @@
 from flask import Blueprint, request, jsonify
 from app.auth import services as auth_services
+from flask import current_app # Import added for logging
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-    # Ajout d'un log pour inspecter les données reçues
-    from flask import current_app
     current_app.logger.debug(f'Données reçues pour l\'inscription: {data}')
     email = data.get('email')
-
     password = data.get('password')
     first_name = data.get('first_name')
     last_name = data.get('last_name')
@@ -21,11 +19,12 @@ def register():
         return jsonify({'message': 'Tous les champs sont requis.'}), 400
 
     try:
-        user = auth_services.register_user(email, password, first_name, last_name, phone_number, role)
-        return jsonify({'message': 'Inscription réussie. Un code de vérification a été envoyé à votre adresse e-mail.', 'user_id': user.id}), 201
+        auth_services.register_user_initiate(email, password, first_name, last_name, phone_number, role)
+        return jsonify({'message': 'Inscription initiée. Un code de vérification a été envoyé à votre adresse e-mail.'}), 200
     except ValueError as e:
         return jsonify({'message': str(e)}), 409 # Conflict
     except Exception as e:
+        current_app.logger.error(f'Erreur lors de l\'initiation de l\'inscription: {e}', exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
 
 @auth_bp.route('/verify_email', methods=['POST'])
@@ -38,11 +37,12 @@ def verify_email():
         return jsonify({'message': 'L\'e-mail et le code de vérification sont requis.'}), 400
 
     try:
-        if auth_services.verify_email(email, code):
-            return jsonify({'message': 'Adresse e-mail vérifiée avec succès. Vous pouvez maintenant vous connecter.'}), 200
-        else:
-            return jsonify({'message': 'Code de vérification ou e-mail invalide.'}), 400
+        user = auth_services.verify_email_and_register(email, code)
+        return jsonify({'message': 'Adresse e-mail vérifiée avec succès. Compte créé.', 'user_id': user.id}), 200
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
     except Exception as e:
+        current_app.logger.error(f'Erreur lors de la vérification de l\'e-mail: {e}', exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
 
 @auth_bp.route('/login', methods=['POST'])
@@ -65,4 +65,5 @@ def login():
     except ValueError as e:
         return jsonify({'message': str(e)}), 401 # Unauthorized
     except Exception as e:
+        current_app.logger.error(f'Erreur lors de la connexion: {e}', exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
