@@ -14,8 +14,6 @@ class User(db.Model):
     wallet_balance = db.Column(db.Numeric(10, 2), default=0.00)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    is_verified = db.Column(db.Boolean, default=False, nullable=False)
-    verification_code = db.Column(db.String(6), unique=True, nullable=True) # 6-digit code
 
     def __repr__(self):
         return f'<User {self.email}>'
