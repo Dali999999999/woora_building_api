@@ -20,7 +20,7 @@ def create_app():
     db.init_app(app)
     mail.init_app(app)
     jwt.init_app(app)
-    CORS(app, resources={r"/admin/*": {"origins": "https://woora-building-api.onrender.com"}}) # Configure CORS for admin routes
+    CORS(app, resources={r"/admin/*": {"origins": "http://localhost:3000", "https://woora-building-api.onrender.com"}}) # Configure CORS for admin routes
 
     from app.auth import auth_bp
     app.register_blueprint(auth_bp, url_prefix='/auth')
