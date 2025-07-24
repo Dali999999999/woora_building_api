@@ -12,35 +12,58 @@ def create_property():
     current_user_id = get_jwt_identity()
     data = request.get_json()
 
-    # Valider les données requises
-    required_fields = ['property_type_id', 'title', 'description', 'status', 'price', 'address', 'city', 'postal_code', 'image_urls']
-    for field in required_fields:
+    # Valider les données requises minimales (image_urls et attributes)
+    required_top_level_fields = ['image_urls', 'attributes']
+    for field in required_top_level_fields:
         if field not in data:
-            return jsonify({'message': f'Le champ {field} est requis.'}), 400
+            return jsonify({'message': f'Le champ {field} est requis au niveau supérieur.'}), 400
+
+    dynamic_attributes = data.get('attributes', {})
+
+    # Valider les champs essentiels qui sont maintenant dynamiques
+    essential_dynamic_fields = ['property_type_id', 'title', 'status', 'price']
+    for field in essential_dynamic_fields:
+        if field not in dynamic_attributes:
+            return jsonify({'message': f'L\'attribut dynamique "{field}" est requis.'}), 400
 
     # Vérifier l'existence de l'owner et son rôle
     owner = User.query.get(current_user_id)
     if not owner or owner.role != 'owner':
         return jsonify({'message': 'Accès non autorisé. Seuls les propriétaires peuvent créer des biens.'}), 403
 
-    property_type = PropertyType.query.get(data['property_type_id'])
+    # Extraire les valeurs des attributs dynamiques avec conversion de type
+    try:
+        property_type_id = int(dynamic_attributes['property_type_id'])
+        price = float(dynamic_attributes['price'])
+        title = dynamic_attributes['title']
+        status = dynamic_attributes['status']
+        description = dynamic_attributes.get('description')
+        address = dynamic_attributes.get('address')
+        city = dynamic_attributes.get('city')
+        postal_code = dynamic_attributes.get('postal_code')
+        latitude = dynamic_attributes.get('latitude')
+        longitude = dynamic_attributes.get('longitude')
+    except (ValueError, TypeError) as e:
+        return jsonify({'message': f'Erreur de type ou de valeur pour un attribut dynamique essentiel: {e}'}), 400
+
+    property_type = PropertyType.query.get(property_type_id)
     if not property_type:
         return jsonify({'message': 'Type de propriété invalide ou non trouvé.'}), 400
 
     # Créer le bien immobilier
     new_property = Property(
         owner_id=current_user_id, # Utiliser l'ID de l'utilisateur authentifié
-        property_type_id=data['property_type_id'],
-        title=data['title'],
-        description=data['description'],
-        status=data['status'],
-        price=data['price'],
-        address=data['address'],
-        city=data['city'],
-        postal_code=data['postal_code'],
-        latitude=data.get('latitude'),
-        longitude=data.get('longitude'),
-        attributes=data.get('attributes', {}), # Attributs dynamiques
+        property_type_id=property_type_id,
+        title=title,
+        description=description,
+        status=status,
+        price=price,
+        address=address,
+        city=city,
+        postal_code=postal_code,
+        latitude=latitude,
+        longitude=longitude,
+        attributes=dynamic_attributes, # Stocker tous les attributs dynamiques
         is_validated=False # Par défaut, le bien n'est pas validé
     )
 
