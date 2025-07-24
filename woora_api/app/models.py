@@ -18,6 +18,19 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.email}>'
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'phone_number': self.phone_number,
+            'role': self.role,
+            'wallet_balance': float(self.wallet_balance) if self.wallet_balance is not None else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 class AppSetting(db.Model):
     __tablename__ = 'AppSettings'
     id = db.Column(db.Integer, primary_key=True)
@@ -44,6 +57,14 @@ class PropertyType(db.Model):
     description = db.Column(db.Text)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'is_active': self.is_active,
+        }
+
 class PropertyAttribute(db.Model):
     __tablename__ = 'PropertyAttributes'
     id = db.Column(db.Integer, primary_key=True)
@@ -53,12 +74,29 @@ class PropertyAttribute(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('Users.id'))
     user = db.relationship('User', backref='property_attributes')
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'data_type': self.data_type,
+            'is_filterable': self.is_filterable,
+            'created_by': self.created_by,
+            'options': [option.to_dict() for option in self.options] if self.data_type == 'enum' else [],
+        }
+
 class AttributeOption(db.Model):
     __tablename__ = 'AttributeOptions'
     id = db.Column(db.Integer, primary_key=True)
     attribute_id = db.Column(db.Integer, db.ForeignKey('PropertyAttributes.id', ondelete='CASCADE'), nullable=False)
     option_value = db.Column(db.String(100), nullable=False)
     attribute = db.relationship('PropertyAttribute', backref='options')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'attribute_id': self.attribute_id,
+            'option_value': self.option_value,
+        }
 
 class PropertyAttributeScope(db.Model):
     __tablename__ = 'PropertyAttributeScopes'
@@ -87,6 +125,26 @@ class Property(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     owner = db.relationship('User', backref='properties')
     property_type = db.relationship('PropertyType', backref='properties')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'owner_id': self.owner_id,
+            'property_type_id': self.property_type_id,
+            'title': self.title,
+            'description': self.description,
+            'status': self.status,
+            'price': float(self.price) if self.price is not None else None,
+            'address': self.address,
+            'city': self.city,
+            'postal_code': self.postal_code,
+            'latitude': float(self.latitude) if self.latitude is not None else None,
+            'longitude': float(self.longitude) if self.longitude is not None else None,
+            'attributes': self.attributes,
+            'is_validated': self.is_validated,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 class PropertyImage(db.Model):
     __tablename__ = 'PropertyImages'
