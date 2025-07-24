@@ -121,6 +121,30 @@ def get_property_attributes():
     property_attributes = PropertyAttribute.query.all()
     return jsonify([pa.to_dict() for pa in property_attributes])
 
+@admin_bp.route('/property_type_scopes/<int:property_type_id>', methods=['GET'])
+def get_property_type_scopes(property_type_id):
+    scopes = PropertyAttributeScope.query.filter_by(property_type_id=property_type_id).all()
+    return jsonify([s.attribute_id for s in scopes])
+
+@admin_bp.route('/property_type_scopes/<int:property_type_id>', methods=['POST'])
+def update_property_type_scopes(property_type_id):
+    data = request.get_json()
+    attribute_ids = data.get('attribute_ids', [])
+
+    # Supprimer les scopes existants pour ce property_type_id
+    PropertyAttributeScope.query.filter_by(property_type_id=property_type_id).delete()
+
+    # Ajouter les nouveaux scopes
+    for attr_id in attribute_ids:
+        new_scope = PropertyAttributeScope(
+            property_type_id=property_type_id,
+            attribute_id=attr_id
+        )
+        db.session.add(new_scope)
+    db.session.commit()
+
+    return jsonify({'message': 'Scopes d\'attributs mis à jour avec succès.'}), 200
+
 @admin_bp.route('/property_types_with_attributes', methods=['GET'])
 def get_property_types_with_attributes():
     property_types = PropertyType.query.all()
