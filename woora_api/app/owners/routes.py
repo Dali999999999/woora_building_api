@@ -14,6 +14,9 @@ def create_property():
     current_app.logger.debug(f"Utilisateur authentifié ID: {current_user_id}")
 
     data = request.get_json()
+    import logging
+    logging.getLogger().setLevel(logging.DEBUG)
+    logging.debug("🔍 Payload reçu : %s", data)
     current_app.logger.debug(f"JSON brut reçu: {data}")
 
     # Valider les données requises minimales (image_urls et attributes)
