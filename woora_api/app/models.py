@@ -69,7 +69,7 @@ class PropertyAttribute(db.Model):
     __tablename__ = 'PropertyAttributes'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    data_type = db.Column(db.Enum('integer', 'boolean', 'string', 'decimal', 'enum'), nullable=False)
+    data_type = db.Column(db.Enum('integer', 'boolean', 'string', 'decimal', 'enum', 'image'), nullable=False)
     is_filterable = db.Column(db.Boolean, default=True)
     created_by = db.Column(db.Integer, db.ForeignKey('Users.id'))
     user = db.relationship('User', backref='property_attributes')
