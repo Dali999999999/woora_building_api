@@ -1,8 +1,18 @@
 
-from flask import Blueprint, jsonify, request
+
+from flask import Blueprint, jsonify, request, current_app
 from app.models import User, Property, PropertyType, PropertyAttribute, AttributeOption, PropertyAttributeScope, db
+from app.utils.mega_utils import get_mega_instance
+from werkzeug.utils import secure_filename
+import os
+import uuid
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+# Dossier temporaire pour les uploads
+UPLOAD_FOLDER = '/tmp' # Ou un autre chemin approprié
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 @admin_bp.route('/users', methods=['GET'])
 def get_users():
@@ -30,7 +40,6 @@ def add_property_attribute():
     name = data.get('name')
     data_type = data.get('data_type')
     is_filterable = data.get('is_filterable', False)
-    # created_by = data.get('created_by') # Assuming admin user for now
 
     if not all([name, data_type]):
         return jsonify({'message': 'Nom et type de données sont requis.'}), 400
@@ -42,7 +51,6 @@ def add_property_attribute():
         name=name,
         data_type=data_type,
         is_filterable=is_filterable,
-        # created_by=created_by
     )
     db.session.add(new_attribute)
     db.session.commit()
@@ -62,3 +70,73 @@ def add_property_attribute():
 def get_property_attributes():
     property_attributes = PropertyAttribute.query.all()
     return jsonify([pa.to_dict() for pa in property_attributes])
+
+@admin_bp.route('/upload_image', methods=['POST'])
+def upload_image():
+    current_app.logger.info("Requête reçue sur /upload_image")
+
+    if 'file' not in request.files:
+        current_app.logger.warning("Upload: Aucun fichier trouvé.")
+        return jsonify({"error": "Aucun fichier fourni"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        current_app.logger.warning("Upload: Nom de fichier vide.")
+        return jsonify({"error": "Nom de fichier vide"}), 400
+
+    if file:
+        original_filename = secure_filename(file.filename)
+        temp_filename_upload = f"{uuid.uuid4()}_UPLOAD_{original_filename}"
+        temp_filepath_upload = os.path.join(UPLOAD_FOLDER, temp_filename_upload)
+        current_app.logger.info(f"Upload: Sauvegarde temporaire sous: '{temp_filepath_upload}'")
+
+        try:
+            file.save(temp_filepath_upload)
+            file_size = os.path.getsize(temp_filepath_upload)
+            current_app.logger.info(f"Upload: Fichier sauvegardé: '{temp_filepath_upload}' ({file_size} bytes)")
+
+            m = get_mega_instance()
+            if m is None:
+                current_app.logger.error("Upload: Échec connexion Mega.")
+                return jsonify({"error": "Échec connexion service stockage"}), 503
+
+            current_app.logger.info(f"Upload: Téléversement '{temp_filename_upload}' sur Mega...")
+            uploaded_file_node_response = m.upload(temp_filepath_upload)
+            current_app.logger.info(f"Upload: Téléversement terminé.")
+
+            public_link = None
+            try:
+                current_app.logger.info("Upload: Génération lien via m.get_upload_link()...")
+                public_link = m.get_upload_link(uploaded_file_node_response)
+                current_app.logger.info(f"Upload: Lien public généré: {public_link}")
+            except Exception as e_get_link:
+                current_app.logger.error(f"Upload: Erreur get_upload_link: {e_get_link}", exc_info=True)
+                current_app.logger.warning("Upload: Fallback avec m.export()...")
+                try:
+                    file_handle = uploaded_file_node_response.get('f', [{}])[0].get('h')
+                    if file_handle:
+                        public_link = m.export(file_handle)
+                        current_app.logger.info(f"Upload: Lien public généré (fallback): {public_link}")
+                    else: raise ValueError("Handle non trouvé pour fallback.")
+                except Exception as inner_e:
+                    current_app.logger.error(f"Upload: Fallback export échoué: {inner_e}", exc_info=True)
+                    return jsonify({"error": "Erreur interne génération lien post-upload"}), 500
+
+            if public_link:
+                return jsonify({"url": public_link}), 200
+            else:
+                current_app.logger.error("Upload: Lien public final est None.")
+                return jsonify({"error": "Erreur interne finalisation lien public."}), 500
+
+        except Exception as e:
+            current_app.logger.error(f"Upload: Erreur majeure '{original_filename}': {e}", exc_info=True)
+            return jsonify({"error": f"Erreur interne serveur ({type(e).__name__})."}), 500
+        finally:
+            if os.path.exists(temp_filepath_upload):
+                try:
+                    os.remove(temp_filepath_upload)
+                    current_app.logger.info(f"Upload: Fichier temporaire supprimé: '{temp_filepath_upload}'")
+                except OSError as e_remove:
+                    current_app.logger.error(f"Upload: Erreur suppression temp: {e_remove}")
+    else:
+        return jsonify({"error": "Fichier invalide ou non traité"}), 400
+
