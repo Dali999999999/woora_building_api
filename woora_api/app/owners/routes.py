@@ -2,23 +2,26 @@
 from flask import Blueprint, request, jsonify
 from app import db
 from app.models import Property, PropertyImage, User, PropertyType
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 owners_bp = Blueprint('owners', __name__, url_prefix='/owners')
 
 @owners_bp.route('/properties', methods=['POST'])
+@jwt_required()
 def create_property():
+    current_user_id = get_jwt_identity()
     data = request.get_json()
 
     # Valider les données requises
-    required_fields = ['owner_id', 'property_type_id', 'title', 'description', 'status', 'price', 'address', 'city', 'postal_code', 'image_urls']
+    required_fields = ['property_type_id', 'title', 'description', 'status', 'price', 'address', 'city', 'postal_code', 'image_urls']
     for field in required_fields:
         if field not in data:
             return jsonify({'message': f'Le champ {field} est requis.'}), 400
 
-    # Vérifier l'existence de l'owner et du property_type
-    owner = User.query.get(data['owner_id'])
+    # Vérifier l'existence de l'owner et son rôle
+    owner = User.query.get(current_user_id)
     if not owner or owner.role != 'owner':
-        return jsonify({'message': 'Propriétaire invalide ou non trouvé.'}), 400
+        return jsonify({'message': 'Accès non autorisé. Seuls les propriétaires peuvent créer des biens.'}), 403
 
     property_type = PropertyType.query.get(data['property_type_id'])
     if not property_type:
@@ -26,7 +29,7 @@ def create_property():
 
     # Créer le bien immobilier
     new_property = Property(
-        owner_id=data['owner_id'],
+        owner_id=current_user_id, # Utiliser l'ID de l'utilisateur authentifié
         property_type_id=data['property_type_id'],
         title=data['title'],
         description=data['description'],
