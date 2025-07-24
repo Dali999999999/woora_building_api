@@ -2,12 +2,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app import create_app, db
-from flask import request, jsonify, send_file, make_response
+from flask import request, jsonify, send_file, make_response, current_app
 from app.utils.mega_utils import get_mega_instance
 import mimetypes
 import os
 
 app = create_app()
+
+@app.before_request
+def log_request_info():
+    current_app.logger.debug(f'🌐 Requête reçue: {request.method} {request.path}')
+    current_app.logger.debug(f'🔑 Headers: {dict(request.headers)}')
+    current_app.logger.debug(f'📦 Content-Type: {request.content_type}')
+    if request.is_json:
+        try:
+            current_app.logger.debug(f'📄 Body JSON: {request.get_json()}')
+        except Exception as e:
+            current_app.logger.error(f'Erreur de parsing JSON: {e}')
+            current_app.logger.debug(f'📄 Body brut (non JSON): {request.get_data()}')
+    else:
+        current_app.logger.debug(f'📄 Body brut: {request.get_data()}')
+
+@app.after_request
+def log_response_info(response):
+    current_app.logger.debug(f'📤 Réponse: {response.status_code} - {response.get_data(as_text=True)[:100]}')
+    return response
 
 # Dossier temporaire pour les téléchargements
 DOWNLOAD_FOLDER = '/tmp' # Ou un autre chemin approprié
