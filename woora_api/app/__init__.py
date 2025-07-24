@@ -35,4 +35,7 @@ def create_app():
     from app.admin.routes import admin_bp
     app.register_blueprint(admin_bp)
 
+    from app.owners.routes import owners_bp
+    app.register_blueprint(owners_bp)
+    
     return app
