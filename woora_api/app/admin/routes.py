@@ -121,6 +121,30 @@ def get_property_attributes():
     property_attributes = PropertyAttribute.query.all()
     return jsonify([pa.to_dict() for pa in property_attributes])
 
+@admin_bp.route('/property_types_with_attributes', methods=['GET'])
+def get_property_types_with_attributes():
+    property_types = PropertyType.query.all()
+    result = []
+    for pt in property_types:
+        pt_dict = pt.to_dict()
+        # Récupérer les scopes pour ce type de propriété
+        scopes = PropertyAttributeScope.query.filter_by(property_type_id=pt.id).all()
+        attribute_ids = [s.attribute_id for s in scopes]
+        
+        # Récupérer les attributs correspondants
+        attributes = PropertyAttribute.query.filter(PropertyAttribute.id.in_(attribute_ids)).all()
+        
+        attributes_list = []
+        for attr in attributes:
+            attr_dict = attr.to_dict()
+            if attr.data_type == 'enum':
+                options = AttributeOption.query.filter_by(attribute_id=attr.id).all()
+                attr_dict['options'] = [opt.to_dict() for opt in options]
+            attributes_list.append(attr_dict)
+        pt_dict['attributes'] = attributes_list
+        result.append(pt_dict)
+    return jsonify(result)
+
 @admin_bp.route('/upload_image', methods=['POST'])
 def upload_image():
     current_app.logger.info("Requête reçue sur /upload_image")
