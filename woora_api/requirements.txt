@@ -7,3 +7,4 @@ Flask-Mail
 Flask-JWT-Extended
 pymysql
 gunicorn
+Flask-CORS>=4.0.0
