@@ -34,6 +34,56 @@ def get_property_types():
     property_types = PropertyType.query.all()
     return jsonify([pt.to_dict() for pt in property_types])
 
+@admin_bp.route('/property_types', methods=['POST'])
+def create_property_type():
+    data = request.get_json()
+    name = data.get('name')
+    description = data.get('description')
+
+    if not name:
+        return jsonify({'message': 'Le nom du type de propriété est requis.'}), 400
+
+    if PropertyType.query.filter_by(name=name).first():
+        return jsonify({'message': 'Un type de propriété avec ce nom existe déjà.'}), 409
+
+    new_property_type = PropertyType(
+        name=name,
+        description=description
+    )
+    db.session.add(new_property_type)
+    db.session.commit()
+    return jsonify({'message': 'Type de propriété créé avec succès.', 'property_type': new_property_type.to_dict()}), 201
+
+@admin_bp.route('/property_types/<int:type_id>', methods=['PUT'])
+def update_property_type(type_id):
+    property_type = PropertyType.query.get_or_404(type_id)
+    data = request.get_json()
+
+    name = data.get('name')
+    description = data.get('description')
+    is_active = data.get('is_active')
+
+    if name:
+        # Check if name already exists for another property type
+        existing_type = PropertyType.query.filter(PropertyType.name == name, PropertyType.id != type_id).first()
+        if existing_type:
+            return jsonify({'message': 'Un autre type de propriété avec ce nom existe déjà.'}), 409
+        property_type.name = name
+    if description is not None:
+        property_type.description = description
+    if is_active is not None:
+        property_type.is_active = is_active
+
+    db.session.commit()
+    return jsonify({'message': 'Type de propriété mis à jour avec succès.', 'property_type': property_type.to_dict()})
+
+@admin_bp.route('/property_types/<int:type_id>', methods=['DELETE'])
+def delete_property_type(type_id):
+    property_type = PropertyType.query.get_or_404(type_id)
+    db.session.delete(property_type)
+    db.session.commit()
+    return jsonify({'message': 'Type de propriété supprimé avec succès.'}), 204
+
 @admin_bp.route('/property_attributes', methods=['POST'])
 def add_property_attribute():
     data = request.get_json()
