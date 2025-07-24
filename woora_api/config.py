@@ -13,3 +13,7 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'noreply@example.com'
+
+    # Configuration Mega.nz
+    MEGA_EMAIL = os.environ.get('MEGA_EMAIL') or 'dev03112005@gmail.com'
+    MEGA_PASSWORD = os.environ.get('MEGA_PASSWORD') or 'CXW404notfound'
