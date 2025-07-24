@@ -101,5 +101,5 @@ def authenticate_user(email, password):
 
     # Puisque l\'utilisateur n\'est enregistré qu\'après vérification, pas besoin de is_verified ici
 
-    access_token = create_access_token(identity={'id': user.id, 'role': user.role})
+    access_token = create_access_token(identity=str(user.id))
     return user, access_token
