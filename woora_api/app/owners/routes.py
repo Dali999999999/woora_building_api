@@ -31,20 +31,56 @@ def create_property():
     if not owner or owner.role != 'owner':
         return jsonify({'message': 'Accès non autorisé. Seuls les propriétaires peuvent créer des biens.'}), 403
 
-    # Extraire les valeurs des attributs dynamiques avec conversion de type
+    # Extraire et valider les champs essentiels
     try:
-        property_type_id = int(dynamic_attributes['property_type_id'])
-        price = float(dynamic_attributes['price'])
-        title = dynamic_attributes['title']
-        status = dynamic_attributes['status']
-        description = dynamic_attributes.get('description')
-        address = dynamic_attributes.get('address')
-        city = dynamic_attributes.get('city')
-        postal_code = dynamic_attributes.get('postal_code')
-        latitude = dynamic_attributes.get('latitude')
-        longitude = dynamic_attributes.get('longitude')
-    except (ValueError, TypeError) as e:
-        return jsonify({'message': f'Erreur de type ou de valeur pour un attribut dynamique essentiel: {e}'}), 400
+        property_type_id = int(dynamic_attributes.get('property_type_id'))
+    except (ValueError, TypeError):
+        return jsonify({'message': 'property_type_id doit être un entier valide.'}), 400
+
+    title = dynamic_attributes.get('title')
+    if not isinstance(title, str) or not title:
+        return jsonify({'message': 'title est requis et doit être une chaîne de caractères non vide.'}), 400
+
+    try:
+        price = float(dynamic_attributes.get('price'))
+    except (ValueError, TypeError):
+        return jsonify({'message': 'price doit être un nombre décimal valide.'}), 400
+
+    status = dynamic_attributes.get('status')
+    allowed_statuses = ['for_sale', 'for_rent', 'sold', 'rented']
+    if status not in allowed_statuses:
+        return jsonify({'message': f'status invalide. Doit être l\'une des valeurs suivantes: {", ".join(allowed_statuses)}.'}), 400
+
+    # Gérer les champs optionnels avec des valeurs par défaut ou None
+    description = dynamic_attributes.get('description')
+    if description is not None and not isinstance(description, str):
+        return jsonify({'message': 'description doit être une chaîne de caractères.'}), 400
+
+    address = dynamic_attributes.get('address')
+    if address is not None and not isinstance(address, str):
+        return jsonify({'message': 'address doit être une chaîne de caractères.'}), 400
+
+    city = dynamic_attributes.get('city')
+    if city is not None and not isinstance(city, str):
+        return jsonify({'message': 'city doit être une chaîne de caractères.'}), 400
+
+    postal_code = dynamic_attributes.get('postal_code')
+    if postal_code is not None and not isinstance(postal_code, str):
+        return jsonify({'message': 'postal_code doit être une chaîne de caractères.'}), 400
+
+    latitude = None
+    if 'latitude' in dynamic_attributes and dynamic_attributes['latitude'] is not None:
+        try:
+            latitude = float(dynamic_attributes['latitude'])
+        except (ValueError, TypeError):
+            return jsonify({'message': 'latitude doit être un nombre décimal valide.'}), 400
+
+    longitude = None
+    if 'longitude' in dynamic_attributes and dynamic_attributes['longitude'] is not None:
+        try:
+            longitude = float(dynamic_attributes['longitude'])
+        except (ValueError, TypeError):
+            return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
 
     property_type = PropertyType.query.get(property_type_id)
     if not property_type:
