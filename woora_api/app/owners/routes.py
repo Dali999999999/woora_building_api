@@ -3,9 +3,9 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import Property, PropertyImage, User, PropertyType
 
-owner_bp = Blueprint('owner', __name__, url_prefix='/owner')
+owners_bp = Blueprint('owners', __name__, url_prefix='/owners')
 
-@owner_bp.route('/properties', methods=['POST'])
+@owners_bp.route('/properties', methods=['POST'])
 def create_property():
     data = request.get_json()
 
