@@ -161,30 +161,7 @@ def create_property():
         # CORRECTION
         return jsonify({'message': "Erreur lors de la création du bien immobilier.", 'error': str(e)}), 500
 
-@owners_bp.route('/properties', methods=['GET'])
-@jwt_required()
-# Dans votre fichier de routes (ex: app/owners/routes.py)
-# REMPLACEZ l'ancienne fonction par celle-ci
 
-def get_owner_properties():
-    current_user_id = get_jwt_identity()
-    owner = User.query.get(current_user_id)
-    if not owner or owner.role != 'owner':
-        return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent voir leurs biens."}), 403
-
-    properties = Property.query.filter_by(owner_id=current_user_id).all()
-    
-    # --- DÉBUT DE LA CORRECTION ---
-    properties_with_images = []
-    for prop in properties:
-        # On commence avec le dictionnaire de base du bien
-        property_dict = prop.to_dict()
-        # On ajoute manuellement la liste des URLs d'images
-        property_dict['image_urls'] = [image.image_url for image in prop.images]
-        properties_with_images.append(property_dict)
-    # --- FIN DE LA CORRECTION ---
-
-    return jsonify(properties_with_images), 200
 
 @owners_bp.route('/properties/<int:property_id>', methods=['GET'])
 @jwt_required()
