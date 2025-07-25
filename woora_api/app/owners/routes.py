@@ -201,7 +201,8 @@ def get_owner_property_details(property_id): # NOUVEAU NOM (ou gardez celui-ci s
     return jsonify(property_dict), 200
 
 @owners_bp.route('/properties/<int:property_id>', methods=['PUT'])
-@jwt_required()def update_owner_property(property_id):
+@jwt_required()
+def update_owner_property(property_id):
     """
     Met à jour un bien immobilier existant.
     Gère à la fois les champs statiques (colonnes de la table) et les attributs dynamiques (champ JSON).
