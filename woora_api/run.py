@@ -33,28 +33,28 @@ DOWNLOAD_FOLDER = '/tmp' # Ou un autre chemin approprié
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-@app.route('/get_image_from_mega_link', methods=['POST'])
+@app.route('/get_image_from_mega_link', methods=['GET'])
 def get_image_from_mega_link():
-    app.logger.info("Requête reçue sur /get_image_from_mega_link")
+    app.logger.info("Requête GET reçue sur /get_image_from_mega_link")
 
-    data = request.get_json()
-    if not data:
-        app.logger.warning("DownloadProxy: Corps de requête vide ou non JSON.")
-        return jsonify({"error": "Corps de requête JSON manquant ou invalide"}), 400
+    # --- DÉBUT DE LA CORRECTION ---
+    # On lit le paramètre depuis l'URL (ex: ?url=...) au lieu d'un corps JSON
+    mega_url = request.args.get('url') 
+    # --- FIN DE LA CORRECTION ---
 
-    mega_url = data.get('mega_url')
     if not mega_url:
-        app.logger.warning("DownloadProxy: Clé 'mega_url' manquante dans JSON.")
-        return jsonify({"error": "Clé 'mega_url' manquante"}), 400
+        app.logger.warning("DownloadProxy: Paramètre d'URL 'url' manquant.")
+        return jsonify({"error": "Paramètre d'URL 'url' manquant"}), 400
 
     if not mega_url.startswith("https://mega.") or '!' not in mega_url:
         app.logger.warning(f"DownloadProxy: Format URL Mega invalide reçu: {mega_url}")
-        return jsonify({"error": "QR code invalide"}), 400
+        return jsonify({"error": "URL invalide"}), 400
 
     app.logger.info(f"DownloadProxy: Traitement du lien: {mega_url[:35]}...")
 
     temp_download_path = None
     try:
+        # ... Le reste de votre logique de téléchargement est CORRECT et ne change pas ...
         mega_downloader = get_mega_instance()
         if mega_downloader is None:
             app.logger.error("DownloadProxy: Échec connexion Mega.")
@@ -79,12 +79,7 @@ def get_image_from_mega_link():
 
         app.logger.info(f"DownloadProxy: Envoi du fichier '{os.path.basename(temp_download_path)}' avec mimetype '{mimetype}'...")
 
-        response = make_response(send_file(
-            temp_download_path,
-            mimetype=mimetype,
-            as_attachment=False
-        ))
-        return response
+        return send_file(temp_download_path, mimetype=mimetype, as_attachment=False)
 
     except Exception as e:
         app.logger.error(f"DownloadProxy: Erreur inattendue lors du téléchargement/envoi: {e}", exc_info=True)
