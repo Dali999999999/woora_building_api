@@ -162,6 +162,24 @@ def create_property():
         return jsonify({'message': "Erreur lors de la création du bien immobilier.", 'error': str(e)}), 500
 
 
+@owners_bp.route('/properties', methods=['GET'])
+@jwt_required()
+def get_all_owner_properties(): # NOUVEAU NOM : get_ALL_owner_properties
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent voir leurs biens."}), 403
+
+    properties = Property.query.filter_by(owner_id=current_user_id).all()
+    
+    properties_with_images = []
+    for prop in properties:
+        property_dict = prop.to_dict()
+        property_dict['image_urls'] = [image.image_url for image in prop.images]
+        properties_with_images.append(property_dict)
+
+    return jsonify(properties_with_images), 200
+
 
 @owners_bp.route('/properties/<int:property_id>', methods=['GET'])
 @jwt_required()
