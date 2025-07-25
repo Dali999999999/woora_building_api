@@ -201,8 +201,11 @@ def get_owner_property_details(property_id): # NOUVEAU NOM (ou gardez celui-ci s
     return jsonify(property_dict), 200
 
 @owners_bp.route('/properties/<int:property_id>', methods=['PUT'])
-@jwt_required()
-def update_owner_property(property_id):
+@jwt_required()def update_owner_property(property_id):
+    """
+    Met à jour un bien immobilier existant.
+    Gère à la fois les champs statiques (colonnes de la table) et les attributs dynamiques (champ JSON).
+    """
     current_user_id = get_jwt_identity()
     owner = User.query.get(current_user_id)
     if not owner or owner.role != 'owner':
@@ -220,19 +223,20 @@ def update_owner_property(property_id):
 
     attributes_data = data.get('attributes')
     if attributes_data:
-        # --- DÉBUT DE LA LOGIQUE DE MISE À JOUR CORRIGÉE ---
+        # 1. Mise à jour des champs STATIQUES (colonnes directes du modèle Property)
+        # On met à jour un champ uniquement si sa clé est présente dans la requête.
         
-        # 1. Mise à jour des champs STATIQUES (colonnes de la table Property)
-        if 'title' in attributes_data and attributes_data['title'] is not None:
+        if 'title' in attributes_data:
             property.title = attributes_data['title']
         
-        if 'price' in attributes_data and attributes_data['price'] is not None:
+        if 'price' in attributes_data:
             try:
-                property.price = float(attributes_data['price'])
+                # Gère le cas où le prix est None
+                property.price = float(attributes_data['price']) if attributes_data['price'] is not None else None
             except (ValueError, TypeError):
                 return jsonify({'message': "Le prix doit être un nombre valide."}), 400
         
-        if 'status' in attributes_data and attributes_data['status'] is not None:
+        if 'status' in attributes_data:
             property.status = attributes_data['status']
             
         if 'description' in attributes_data:
@@ -247,15 +251,19 @@ def update_owner_property(property_id):
         if 'postal_code' in attributes_data:
             property.postal_code = attributes_data.get('postal_code')
             
+        # Gestion robuste pour les champs numériques optionnels (latitude/longitude)
         if 'latitude' in attributes_data:
+            lat_val = attributes_data.get('latitude')
             try:
-                property.latitude = float(attributes_data['latitude']) if attributes_data['latitude'] is not None else None
+                # Si la valeur est une chaîne vide, "null", ou None, on met la colonne à NULL.
+                property.latitude = float(lat_val) if lat_val and str(lat_val).lower() != 'null' else None
             except (ValueError, TypeError):
                 return jsonify({'message': 'latitude doit être un nombre décimal valide.'}), 400
                 
         if 'longitude' in attributes_data:
+            lon_val = attributes_data.get('longitude')
             try:
-                property.longitude = float(attributes_data['longitude']) if attributes_data['longitude'] is not None else None
+                property.longitude = float(lon_val) if lon_val and str(lon_val).lower() != 'null' else None
             except (ValueError, TypeError):
                 return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
 
@@ -263,15 +271,13 @@ def update_owner_property(property_id):
         if property.attributes is None:
             property.attributes = {}
         
-        # On met à jour le champ JSON avec toutes les nouvelles données
+        # On fusionne les nouvelles données dans le champ JSON existant
         property.attributes.update(attributes_data)
         
-        # On force SQLAlchemy à détecter le changement dans le champ JSON
+        # On force SQLAlchemy à détecter que le contenu du champ JSON a été modifié
         flag_modified(property, "attributes")
-        
-        # --- FIN DE LA LOGIQUE DE MISE À JOUR CORRIGÉE ---
 
-    # La gestion des images reste inchangée (elle est correcte)
+    # La gestion des images reste la même, elle est correcte
     if 'image_urls' in data:
         PropertyImage.query.filter_by(property_id=property.id).delete()
         db.session.flush()
@@ -288,9 +294,8 @@ def update_owner_property(property_id):
     try:
         db.session.commit()
         
-        # On reconstruit la réponse pour inclure les images, pour une meilleure cohérence
+        # Utiliser la méthode to_dict() du modèle pour une réponse cohérente
         updated_property_dict = property.to_dict()
-        updated_property_dict['image_urls'] = [img.image_url for img in property.images]
         
         return jsonify({
             'message': "Bien immobilier mis à jour avec succès.",
