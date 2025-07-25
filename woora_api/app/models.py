@@ -10,7 +10,9 @@ class User(db.Model):
     first_name = db.Column(db.String(100))
     last_name = db.Column(db.String(100))
     phone_number = db.Column(db.String(20))
-    role = db.Column(db.Enum('owner', 'agent', 'customer', 'admin'), nullable=False)
+    # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker' pour la cohérence
+    # Si vous utilisez bien 'customer', remplacez 'seeker' par 'customer' ici.
+    role = db.Column(db.Enum('owner', 'agent', 'seeker', 'admin'), nullable=False) 
     wallet_balance = db.Column(db.Numeric(10, 2), default=0.00)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -47,7 +49,8 @@ class ServiceFee(db.Model):
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
-    applicable_to_role = db.Column(db.Enum('owner', 'agent', 'customer'), nullable=False)
+    # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker'
+    applicable_to_role = db.Column(db.Enum('owner', 'agent', 'seeker'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
 class PropertyType(db.Model):
@@ -89,7 +92,7 @@ class AttributeOption(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     attribute_id = db.Column(db.Integer, db.ForeignKey('PropertyAttributes.id', ondelete='CASCADE'), nullable=False)
     option_value = db.Column(db.String(100), nullable=False)
-    attribute = db.relationship('PropertyAttribute', backref='options')
+    attribute = db.relationship('PropertyAttribute', backref=db.backref('options', cascade="all, delete-orphan"))
 
     def to_dict(self):
         return {
@@ -123,55 +126,56 @@ class Property(db.Model):
     is_validated = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
     owner = db.relationship('User', backref='properties')
     property_type = db.relationship('PropertyType', backref='properties')
-    images = db.relationship('PropertyImage', back_populates='property', cascade="all, delete-orphan", lazy=True)
 
+    # --- DÉBUT DE LA CORRECTION POUR LA SUPPRESSION ---
+    images = db.relationship('PropertyImage', back_populates='property', cascade="all, delete-orphan", lazy=True)
+    # --- FIN DE LA CORRECTION ---
+
+    # --- CORRECTION DE LA SYNTAXE ET DE LA LOGIQUE ---
+    # La définition de la méthode doit être indentée à l'intérieur de la classe
     def to_dict(self):
-    # Dictionnaire de base avec les champs STATIQUES comme source de vérité
-    base_data = {
-        'id': self.id,
-        'owner_id': self.owner_id,
-        'property_type_id': self.property_type_id,
-        'title': self.title,
-        'description': self.description,
-        'status': self.status,
-        'price': float(self.price) if self.price is not None else None,
-        'address': self.address,
-        'city': self.city,
-        'postal_code': self.postal_code,
-        'latitude': float(self.latitude) if self.latitude is not None else None,
-        'longitude': float(self.longitude) if self.longitude is not None else None,
-        'is_validated': self.is_validated,
-        'created_at': self.created_at.isoformat() if self.created_at else None,
-        'updated_at': self.updated_at.isoformat() if self.updated_at else None
-    }
-    
-    # --- DÉBUT DE LA LOGIQUE CORRIGÉE ---
-    # On crée un dictionnaire 'attributes' propre.
-    # On commence par copier tous les attributs du champ JSON.
-    attributes_dict = self.attributes.copy() if self.attributes else {}
-    
-    # Ensuite, on s'assure que les valeurs statiques (la source de vérité)
-    # écrasent les éventuelles valeurs en double dans le champ JSON.
-    attributes_dict['title'] = self.title
-    attributes_dict['price'] = float(self.price) if self.price is not None else None
-    attributes_dict['status'] = self.status
-    attributes_dict['description'] = self.description
-    attributes_dict['address'] = self.address
-    attributes_dict['city'] = self.city
-    attributes_dict['postal_code'] = self.postal_code
-    attributes_dict['latitude'] = float(self.latitude) if self.latitude is not None else None
-    attributes_dict['longitude'] = float(self.longitude) if self.longitude is not None else None
-    
-    # On attache le dictionnaire d'attributs nettoyé à notre objet final.
-    base_data['attributes'] = attributes_dict
-    
-    # On ajoute aussi les image_urls, ce qui est une bonne pratique
-    base_data['image_urls'] = [image.image_url for image in self.images]
-    
-    return base_data
-    # --- FIN DE LA LOGIQUE CORRIGÉE ---
+        # Dictionnaire de base avec les champs statiques comme source de vérité
+        base_data = {
+            'id': self.id,
+            'owner_id': self.owner_id,
+            'property_type_id': self.property_type_id,
+            'title': self.title,
+            'description': self.description,
+            'status': self.status,
+            'price': float(self.price) if self.price is not None else None,
+            'address': self.address,
+            'city': self.city,
+            'postal_code': self.postal_code,
+            'latitude': float(self.latitude) if self.latitude is not None else None,
+            'longitude': float(self.longitude) if self.longitude is not None else None,
+            'is_validated': self.is_validated,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+        
+        # On crée un dictionnaire 'attributes' propre et cohérent
+        attributes_dict = self.attributes.copy() if self.attributes else {}
+        
+        # On s'assure que les valeurs statiques écrasent les valeurs en double dans le JSON
+        attributes_dict['title'] = self.title
+        attributes_dict['price'] = float(self.price) if self.price is not None else None
+        attributes_dict['status'] = self.status
+        attributes_dict['description'] = self.description
+        attributes_dict['address'] = self.address
+        attributes_dict['city'] = self.city
+        attributes_dict['postal_code'] = self.postal_code
+        attributes_dict['latitude'] = float(self.latitude) if self.latitude is not None else None
+        attributes_dict['longitude'] = float(self.longitude) if self.longitude is not None else None
+        attributes_dict['property_type_id'] = self.property_type_id
+        
+        base_data['attributes'] = attributes_dict
+        base_data['image_urls'] = [image.image_url for image in self.images]
+        
+        return base_data
+    # --- FIN DE LA CORRECTION ---
 
 class PropertyImage(db.Model):
     __tablename__ = 'PropertyImages'
@@ -179,7 +183,11 @@ class PropertyImage(db.Model):
     property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
     image_url = db.Column(db.String(255), nullable=False)
     display_order = db.Column(db.Integer, default=0)
+    
+    # --- DÉBUT DE LA CORRECTION POUR LA SUPPRESSION ---
+    # On remplace 'backref' par 'back_populates' pour une relation bidirectionnelle explicite
     property = db.relationship('Property', back_populates='images')
+    # --- FIN DE LA CORRECTION ---
 
 class Referral(db.Model):
     __tablename__ = 'Referrals'
@@ -195,6 +203,7 @@ class Referral(db.Model):
 class VisitRequest(db.Model):
     __tablename__ = 'VisitRequests'
     id = db.Column(db.Integer, primary_key=True)
+    # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker'
     customer_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
     property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
     requested_datetime = db.Column(db.DateTime, nullable=False)
@@ -207,6 +216,7 @@ class VisitRequest(db.Model):
 class PropertyRequest(db.Model):
     __tablename__ = 'PropertyRequests'
     id = db.Column(db.Integer, primary_key=True)
+    # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker'
     customer_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
     request_details = db.Column(db.Text)
     city = db.Column(db.String(100))
