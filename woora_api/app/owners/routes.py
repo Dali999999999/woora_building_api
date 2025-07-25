@@ -213,41 +213,65 @@ def update_owner_property(property_id):
         return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas le propriétaire."}), 404
 
     data = request.get_json()
+    if not data:
+        return jsonify({'message': "Corps de la requête manquant ou invalide."}), 400
+        
     current_app.logger.debug(f"Données reçues pour la mise à jour du bien {property_id}: {data}")
 
-    if 'attributes' in data:
-        dynamic_attributes = data.get('attributes', {})
+    attributes_data = data.get('attributes')
+    if attributes_data:
+        # --- DÉBUT DE LA LOGIQUE DE MISE À JOUR CORRIGÉE ---
         
-        # Mettre à jour les champs fixes directement sur l'objet 'property'
-        # (cette partie de votre code est correcte et ne change pas)
-        if 'property_type_id' in dynamic_attributes:
+        # 1. Mise à jour des champs STATIQUES (colonnes de la table Property)
+        if 'title' in attributes_data and attributes_data['title'] is not None:
+            property.title = attributes_data['title']
+        
+        if 'price' in attributes_data and attributes_data['price'] is not None:
             try:
-                # ... (validation inchangée)
-                property.property_type_id = int(dynamic_attributes['property_type_id'])
+                property.price = float(attributes_data['price'])
             except (ValueError, TypeError):
-                return jsonify({'message': "property_type_id doit être un entier valide."}), 400
-        if 'title' in dynamic_attributes:
-            # ... (validation inchangée)
-            property.title = dynamic_attributes['title']
-        if 'price' in dynamic_attributes:
-            # ... (validation inchangée)
-            property.price = float(dynamic_attributes['price'])
-        # ... etc. pour tous les autres champs fixes (status, description, address...)
-
-        # Mettre à jour le champ JSON 'attributes'
-        # C'est ici que la logique doit être précise
-        if property.attributes is None:
-            property.attributes = {} # S'assurer que le champ n'est pas None
+                return jsonify({'message': "Le prix doit être un nombre valide."}), 400
+        
+        if 'status' in attributes_data and attributes_data['status'] is not None:
+            property.status = attributes_data['status']
             
-        property.attributes.update(dynamic_attributes)
+        if 'description' in attributes_data:
+            property.description = attributes_data.get('description')
+            
+        if 'address' in attributes_data:
+            property.address = attributes_data.get('address')
+            
+        if 'city' in attributes_data:
+            property.city = attributes_data.get('city')
+            
+        if 'postal_code' in attributes_data:
+            property.postal_code = attributes_data.get('postal_code')
+            
+        if 'latitude' in attributes_data:
+            try:
+                property.latitude = float(attributes_data['latitude']) if attributes_data['latitude'] is not None else None
+            except (ValueError, TypeError):
+                return jsonify({'message': 'latitude doit être un nombre décimal valide.'}), 400
+                
+        if 'longitude' in attributes_data:
+            try:
+                property.longitude = float(attributes_data['longitude']) if attributes_data['longitude'] is not None else None
+            except (ValueError, TypeError):
+                return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
 
-        # --- CORRECTION : FORCER LA DÉTECTION DU CHANGEMENT ---
-        # Cette ligne est cruciale. Elle dit à SQLAlchemy que le contenu du champ
-        # JSON 'attributes' a été modifié et doit être inclus dans l'UPDATE.
+        # 2. Mise à jour du champ DYNAMIQUE (colonne JSON 'attributes')
+        if property.attributes is None:
+            property.attributes = {}
+        
+        # On met à jour le champ JSON avec toutes les nouvelles données
+        property.attributes.update(attributes_data)
+        
+        # On force SQLAlchemy à détecter le changement dans le champ JSON
         flag_modified(property, "attributes")
-        # --- FIN DE LA CORRECTION ---
+        
+        # --- FIN DE LA LOGIQUE DE MISE À JOUR CORRIGÉE ---
 
-    # La gestion des images (supprimer puis recréer) est une approche valide.
+    # La gestion des images reste inchangée (elle est correcte)
     if 'image_urls' in data:
         PropertyImage.query.filter_by(property_id=property.id).delete()
         db.session.flush()
@@ -263,7 +287,15 @@ def update_owner_property(property_id):
 
     try:
         db.session.commit()
-        return jsonify({'message': "Bien immobilier mis à jour avec succès.", 'property': property.to_dict()}), 200
+        
+        # On reconstruit la réponse pour inclure les images, pour une meilleure cohérence
+        updated_property_dict = property.to_dict()
+        updated_property_dict['image_urls'] = [img.image_url for img in property.images]
+        
+        return jsonify({
+            'message': "Bien immobilier mis à jour avec succès.",
+            'property': updated_property_dict
+        }), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la mise à jour du bien immobilier (rollback): {e}", exc_info=True)
