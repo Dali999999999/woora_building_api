@@ -128,24 +128,50 @@ class Property(db.Model):
     images = db.relationship('PropertyImage', back_populates='property', cascade="all, delete-orphan", lazy=True)
 
     def to_dict(self):
-        return {
-            'id': self.id,
-            'owner_id': self.owner_id,
-            'property_type_id': self.property_type_id,
-            'title': self.title,
-            'description': self.description,
-            'status': self.status,
-            'price': float(self.price) if self.price is not None else None,
-            'address': self.address,
-            'city': self.city,
-            'postal_code': self.postal_code,
-            'latitude': float(self.latitude) if self.latitude is not None else None,
-            'longitude': float(self.longitude) if self.longitude is not None else None,
-            'attributes': self.attributes,
-            'is_validated': self.is_validated,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-        }
+    # Dictionnaire de base avec les champs STATIQUES comme source de vérité
+    base_data = {
+        'id': self.id,
+        'owner_id': self.owner_id,
+        'property_type_id': self.property_type_id,
+        'title': self.title,
+        'description': self.description,
+        'status': self.status,
+        'price': float(self.price) if self.price is not None else None,
+        'address': self.address,
+        'city': self.city,
+        'postal_code': self.postal_code,
+        'latitude': float(self.latitude) if self.latitude is not None else None,
+        'longitude': float(self.longitude) if self.longitude is not None else None,
+        'is_validated': self.is_validated,
+        'created_at': self.created_at.isoformat() if self.created_at else None,
+        'updated_at': self.updated_at.isoformat() if self.updated_at else None
+    }
+    
+    # --- DÉBUT DE LA LOGIQUE CORRIGÉE ---
+    # On crée un dictionnaire 'attributes' propre.
+    # On commence par copier tous les attributs du champ JSON.
+    attributes_dict = self.attributes.copy() if self.attributes else {}
+    
+    # Ensuite, on s'assure que les valeurs statiques (la source de vérité)
+    # écrasent les éventuelles valeurs en double dans le champ JSON.
+    attributes_dict['title'] = self.title
+    attributes_dict['price'] = float(self.price) if self.price is not None else None
+    attributes_dict['status'] = self.status
+    attributes_dict['description'] = self.description
+    attributes_dict['address'] = self.address
+    attributes_dict['city'] = self.city
+    attributes_dict['postal_code'] = self.postal_code
+    attributes_dict['latitude'] = float(self.latitude) if self.latitude is not None else None
+    attributes_dict['longitude'] = float(self.longitude) if self.longitude is not None else None
+    
+    # On attache le dictionnaire d'attributs nettoyé à notre objet final.
+    base_data['attributes'] = attributes_dict
+    
+    # On ajoute aussi les image_urls, ce qui est une bonne pratique
+    base_data['image_urls'] = [image.image_url for image in self.images]
+    
+    return base_data
+    # --- FIN DE LA LOGIQUE CORRIGÉE ---
 
 class PropertyImage(db.Model):
     __tablename__ = 'PropertyImages'
