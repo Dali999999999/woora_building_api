@@ -27,16 +27,31 @@ def log_request_info():
 
 @app.after_request
 def log_response_info(response):
-    """Logge les informations de la réponse après chaque requête."""
-    # --- DÉBUT DE LA CORRECTION ---
+    """
+    Logge les informations de la réponse après chaque requête.
+    Gère différemment les réponses JSON et les réponses de fichiers binaires.
+    """
+    
+    # Vérifie si la réponse est un fichier envoyé en streaming (comme une image)
     if response.direct_passthrough:
-        # Si c'est un fichier streamé (ex: une image), on ne peut pas lire les données.
-        current_app.logger.debug(f'📤 Réponse: {response.status_code} - Envoi d\'un fichier binaire (ex: image).')
+        # Dans ce cas, on ne peut pas lire le contenu avec get_data(), car cela causerait une erreur.
+        # On se contente donc de logger le statut et le type de contenu.
+        current_app.logger.debug(
+            f'📤 Réponse: {response.status_code} - Envoi d\'un fichier binaire. '
+            f'Content-Type: {response.content_type}'
+        )
     else:
-        # Pour les réponses JSON normales, on continue comme avant.
-        current_app.logger.debug(f'📤 Réponse: {response.status_code} - {response.get_data(as_text=True)[:100]}')
-    # --- FIN DE LA CORRECTION ---
+        # Pour toutes les autres réponses (généralement du JSON), on peut lire le début du contenu.
+        current_app.logger.debug(
+            f'📤 Réponse: {response.status_code} - {response.get_data(as_text=True)[:200]}'
+        )
+        
     return response
+
+# Dossier temporaire pour les téléchargements
+DOWNLOAD_FOLDER = '/tmp' # Ou un autre chemin approprié
+if not os.path.exists(DOWNLOAD_FOLDER):
+    os.makedirs(DOWNLOAD_FOLDER)
 
 @app.route('/get_image_from_mega_link', methods=['GET'])
 def get_image_from_mega_link():
