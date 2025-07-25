@@ -188,21 +188,28 @@ def get_owner_properties():
 
 @owners_bp.route('/properties/<int:property_id>', methods=['GET'])
 @jwt_required()
-def get_owner_property_details(property_id):
+# Dans votre fichier de routes (ex: app/owners/routes.py)
+# REMPLACEZ l'ancienne fonction par celle-ci
+
+def get_owner_properties():
     current_user_id = get_jwt_identity()
     owner = User.query.get(current_user_id)
     if not owner or owner.role != 'owner':
-        # CORRECTION
-        return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent voir les détails de leurs biens."}), 403
+        return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent voir leurs biens."}), 403
 
-    property = Property.query.filter_by(id=property_id, owner_id=current_user_id).first()
-    if not property:
-        # CORRECTION
-        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas le propriétaire."}), 404
+    properties = Property.query.filter_by(owner_id=current_user_id).all()
+    
+    # --- DÉBUT DE LA CORRECTION ---
+    properties_with_images = []
+    for prop in properties:
+        # On commence avec le dictionnaire de base du bien
+        property_dict = prop.to_dict()
+        # On ajoute manuellement la liste des URLs d'images
+        property_dict['image_urls'] = [image.image_url for image in prop.images]
+        properties_with_images.append(property_dict)
+    # --- FIN DE LA CORRECTION ---
 
-    property_dict = property.to_dict()
-    property_dict['images'] = [img.image_url for img in property.images]
-    return jsonify(property_dict), 200
+    return jsonify(properties_with_images), 200
 
 @owners_bp.route('/properties/<int:property_id>', methods=['PUT'])
 @jwt_required()
