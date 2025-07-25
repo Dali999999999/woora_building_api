@@ -125,6 +125,7 @@ class Property(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     owner = db.relationship('User', backref='properties')
     property_type = db.relationship('PropertyType', backref='properties')
+    images = db.relationship('PropertyImage', back_populates='property', cascade="all, delete-orphan", lazy=True)
 
     def to_dict(self):
         return {
@@ -152,7 +153,7 @@ class PropertyImage(db.Model):
     property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
     image_url = db.Column(db.String(255), nullable=False)
     display_order = db.Column(db.Integer, default=0)
-    property = db.relationship('Property', backref='images')
+    property = db.relationship('Property', back_populates='images')
 
 class Referral(db.Model):
     __tablename__ = 'Referrals'
