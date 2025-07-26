@@ -12,7 +12,7 @@ class User(db.Model):
     phone_number = db.Column(db.String(20))
     # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker' pour la cohérence
     # Si vous utilisez bien 'customer', remplacez 'customer' par 'customer' ici.
-    role = db.Column(db.Enum('owner', 'agent', 'seeker', 'admin'), nullable=False) 
+    role = db.Column(db.Enum('owner', 'agent', 'customer', 'admin'), nullable=False) 
     wallet_balance = db.Column(db.Numeric(10, 2), default=0.00)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -50,7 +50,7 @@ class ServiceFee(db.Model):
     description = db.Column(db.Text)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker'
-    applicable_to_role = db.Column(db.Enum('owner', 'agent', 'seeker'), nullable=False)
+    applicable_to_role = db.Column(db.Enum('owner', 'agent', 'customer'), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
 class PropertyType(db.Model):
