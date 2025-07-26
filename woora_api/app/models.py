@@ -11,7 +11,7 @@ class User(db.Model):
     last_name = db.Column(db.String(100))
     phone_number = db.Column(db.String(20))
     # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker' pour la cohérence
-    # Si vous utilisez bien 'customer', remplacez 'seeker' par 'customer' ici.
+    # Si vous utilisez bien 'customer', remplacez 'customer' par 'customer' ici.
     role = db.Column(db.Enum('owner', 'agent', 'seeker', 'admin'), nullable=False) 
     wallet_balance = db.Column(db.Numeric(10, 2), default=0.00)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
