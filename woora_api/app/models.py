@@ -175,14 +175,13 @@ class Property(db.Model):
         base_data['image_urls'] = [image.image_url for image in self.images]
 
         if self.property_type:
-        base_data['property_type'] = {
-            'id': self.property_type.id,
-            'name': self.property_type.name
+            base_data['property_type'] = {
+                'id': self.property_type.id,
+                'name': self.property_type.name
         }
-    else:
-        base_data['property_type'] = None
+        else:
+            base_data['property_type'] = None
 
-        
         return base_data
     # --- FIN DE LA CORRECTION ---
 
