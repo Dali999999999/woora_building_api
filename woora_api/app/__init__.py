@@ -69,4 +69,7 @@ def create_app():
     from app.agents.routes import agents_bp
     app.register_blueprint(agents_bp)
 
+    from app.seekers.routes import seekers_bp
+    app.register_blueprint(seekers_bp)
+
     return app
