@@ -26,3 +26,26 @@ def get_all_properties_for_agent():
     
     # On utilise la méthode to_dict() qui est déjà complète et cohérente
     return jsonify([p.to_dict() for p in properties]), 200
+
+@agents_bp.route('/properties/<int:property_id>', methods=['GET'])
+@jwt_required()
+def get_property_details_for_agent(property_id):
+    """
+    Endpoint pour les agents.
+    Récupère les détails d'un bien immobilier spécifique par son ID.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    
+    # Sécurité : Vérifier que l'utilisateur est bien un agent
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    # On récupère le bien par son ID, sans vérifier le propriétaire
+    property = Property.query.get(property_id)
+    
+    if not property:
+        return jsonify({'message': "Bien immobilier non trouvé."}), 404
+
+    # On utilise la méthode to_dict() pour une réponse cohérente
+    return jsonify(property.to_dict()), 200
