@@ -13,6 +13,8 @@ from app.models import User
 # Stockage temporaire pour les inscriptions en attente de vérification
 # Clé: email, Valeur: {'data': user_data, 'code': verification_code, 'expires_at': datetime}
 _pending_registrations = {}
+# Stockage temporaire pour les demandes de réinitialisation
+_pending_resets = {}
 
 def generate_verification_code():
     return ''.join(random.choices(string.digits, k=6))
@@ -111,6 +113,19 @@ def send_reset_password_email(email, code):
                     recipients=[email])
     # Corps du message différent
     msg.body = f'Votre code de réinitialisation de mot de passe est : {code}. Ce code est valide pendant 10 minutes.'
+    try:
+        mail.send(msg)
+        return True
+    except Exception as e:
+        current_app.logger.error(f'Erreur lors de l\'envoi de l\'e-mail à {email}: {e}')
+        return False
+
+def send_reset_password_email(email, code):
+    """Envoie un email avec le code de réinitialisation de mot de passe."""
+    msg = Message('Votre Code de Réinitialisation de Mot de Passe',
+                    sender=current_app.config['MAIL_DEFAULT_SENDER'],
+                    recipients=[email])
+    msg.body = f'Votre code de réinitialisation est : {code}. Ce code est valide pendant 10 minutes.'
     try:
         mail.send(msg)
         return True
