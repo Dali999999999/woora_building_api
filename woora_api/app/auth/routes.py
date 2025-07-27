@@ -107,7 +107,7 @@ def forgot_password():
 
     # On utilise la logique du service d'authentification
     verification_code = auth_services.generate_verification_code()
-    expires_at = datetime.utcnow() + timedelta(minutes=10)
+    expiration_time = datetime.utcnow() + timedelta(seconds=60)
 
     # On stocke en mémoire
     auth_services._pending_resets[email] = {
