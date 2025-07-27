@@ -23,7 +23,7 @@ def send_verification_email(email, code):
     msg = Message('Code de Vérification Woora Immo',
                     sender=current_app.config['MAIL_DEFAULT_SENDER'],
                     recipients=[email])
-    msg.body = f'Votre code de vérification est : {code}. Ce code est valide pendant 10 minutes.'
+    msg.body = f'Votre code de vérification est : {code}. Ce code est valide pendant 60 secondes.'
     try:
         mail.send(msg)
         return True
