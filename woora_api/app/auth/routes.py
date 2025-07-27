@@ -8,6 +8,7 @@ import string
 from datetime import datetime, timedelta
 from flask_jwt_extended import create_access_token
 from app import db
+from werkzeug.security import generate_password_hash
 
 auth_bp = Blueprint('auth', __name__)
 
