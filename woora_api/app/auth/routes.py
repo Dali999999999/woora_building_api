@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.auth import services as auth_services
 from flask import current_app # Import added for logging
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 auth_bp = Blueprint('auth', __name__)
 
