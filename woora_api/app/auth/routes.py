@@ -101,57 +101,50 @@ def forgot_password():
     
     user = User.query.filter_by(email=email).first()
     if not user:
+        # On ne révèle pas si l'email existe pour des raisons de sécurité
         return jsonify({"message": "Si un compte est associé à cet email, un code a été envoyé."}), 200
 
-    reset_code = ''.join(random.choices(string.digits, k=6))
-    expiration_time = datetime.utcnow() + timedelta(minutes=10)
-    
-    # Vous devez avoir ajouté ces colonnes à votre modèle User
-    user.reset_password_code = reset_code
-    user.reset_password_expiration = expiration_time
-    db.session.commit()
-    
-    # --- DÉBUT DE LA CORRECTION ---
-    # On appelle la nouvelle fonction du service d'authentification pour envoyer l'email
-    try:
-        auth_services.send_reset_password_email(user.email, reset_code)
-        current_app.logger.info(f"Email de réinitialisation envoyé avec succès à {user.email}")
-    except Exception as e:
-        # Même si l'email échoue, on ne veut pas le dire à l'utilisateur pour des raisons de sécurité.
-        # On log simplement l'erreur.
-        current_app.logger.error(f"Échec de l'envoi de l'email de réinitialisation pour {user.email}: {e}")
-    # --- FIN DE LA CORRECTION ---
+    # On utilise la logique du service d'authentification
+    verification_code = auth_services.generate_verification_code()
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
+
+    # On stocke en mémoire
+    auth_services._pending_resets[email] = {
+        'code': verification_code,
+        'expires_at': expires_at
+    }
+
+    # On envoie l'email via le service
+    auth_services.send_reset_password_email(email, verification_code)
+    current_app.logger.info(f"Code de réinitialisation pour {email}: {verification_code}")
     
     return jsonify({"message": "Un code de réinitialisation a été envoyé à votre email."}), 200
 
-# Endpoint 2 : Vérification du code
+
 @auth_bp.route('/verify-reset-code', methods=['POST'])
 def verify_reset_code():
     data = request.get_json()
     email = data.get('email')
     code = data.get('code')
     
-    user = User.query.filter_by(email=email).first()
+    # On vérifie dans le dictionnaire en mémoire
+    pending_reset = auth_services._pending_resets.get(email)
     
-    if not user or user.reset_password_code != code or datetime.utcnow() > user.reset_password_expiration:
+    if not pending_reset or pending_reset['code'] != code or datetime.utcnow() > pending_reset['expires_at']:
         return jsonify({"message": "Code invalide ou expiré."}), 400
         
-    # Le code est valide, on crée un token temporaire pour la réinitialisation
-    # On utilise l'email comme identité pour ce token spécifique
-    reset_token = create_access_token(identity=user.email, expires_delta=timedelta(minutes=15))
+    # Le code est valide, on crée un token temporaire
+    reset_token = create_access_token(identity=email, expires_delta=timedelta(minutes=15))
     
-    # On peut effacer le code de la base de données maintenant
-    user.reset_password_code = None
-    user.reset_password_expiration = None
-    db.session.commit()
+    # On supprime l'entrée du dictionnaire
+    del auth_services._pending_resets[email]
     
     return jsonify({"reset_token": reset_token}), 200
 
-# Endpoint 3 : Réinitialisation du mot de passe
+
 @auth_bp.route('/reset-password', methods=['POST'])
-@jwt_required() # On utilise le token temporaire pour sécuriser cet endpoint
+@jwt_required()
 def reset_password():
-    # L'identité de ce token est l'email, pas l'ID utilisateur
     user_email = get_jwt_identity()
     user = User.query.filter_by(email=user_email).first()
     
@@ -164,16 +157,14 @@ def reset_password():
     if not new_password or len(new_password) < 6:
         return jsonify({"message": "Le mot de passe doit contenir au moins 6 caractères."}), 400
     
-    # Hasher et mettre à jour le mot de passe (vous avez sûrement déjà une fonction pour ça)
-    from werkzeug.security import generate_password_hash
     user.password_hash = generate_password_hash(new_password)
     db.session.commit()
     
-    # Connecter l'utilisateur automatiquement en lui renvoyant un nouveau token de connexion normal
+    # On connecte l'utilisateur
     access_token = create_access_token(identity=str(user.id))
     
     return jsonify({
         "message": "Mot de passe réinitialisé avec succès.",
         "access_token": access_token,
-        "user_role": user.role # On renvoie le rôle pour que Flutter sache où rediriger
+        "user_role": user.role
     }), 200
