@@ -101,22 +101,26 @@ def forgot_password():
     
     user = User.query.filter_by(email=email).first()
     if not user:
-        # On ne révèle pas si l'email existe ou non pour des raisons de sécurité
         return jsonify({"message": "Si un compte est associé à cet email, un code a été envoyé."}), 200
 
-    # Générer un code simple à 6 chiffres
     reset_code = ''.join(random.choices(string.digits, k=6))
-    # Définir une expiration (ex: 10 minutes)
     expiration_time = datetime.utcnow() + timedelta(minutes=10)
     
-    # Stocker le code et son expiration (vous aurez besoin d'ajouter ces colonnes au modèle User)
+    # Vous devez avoir ajouté ces colonnes à votre modèle User
     user.reset_password_code = reset_code
     user.reset_password_expiration = expiration_time
     db.session.commit()
     
-    # Logique pour envoyer l'email (à adapter avec votre service d'email)
-    # exemple: send_email(to=user.email, subject="Votre code de réinitialisation", body=f"Votre code est : {reset_code}")
-    current_app.logger.info(f"Code de réinitialisation pour {user.email}: {reset_code}")
+    # --- DÉBUT DE LA CORRECTION ---
+    # On appelle la nouvelle fonction du service d'authentification pour envoyer l'email
+    try:
+        auth_services.send_reset_password_email(user.email, reset_code)
+        current_app.logger.info(f"Email de réinitialisation envoyé avec succès à {user.email}")
+    except Exception as e:
+        # Même si l'email échoue, on ne veut pas le dire à l'utilisateur pour des raisons de sécurité.
+        # On log simplement l'erreur.
+        current_app.logger.error(f"Échec de l'envoi de l'email de réinitialisation pour {user.email}: {e}")
+    # --- FIN DE LA CORRECTION ---
     
     return jsonify({"message": "Un code de réinitialisation a été envoyé à votre email."}), 200
 
