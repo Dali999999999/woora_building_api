@@ -7,6 +7,7 @@ import random
 import string
 from datetime import datetime, timedelta
 from flask_jwt_extended import create_access_token
+from app import db
 
 auth_bp = Blueprint('auth', __name__)
 
