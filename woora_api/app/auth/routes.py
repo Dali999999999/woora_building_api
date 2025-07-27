@@ -112,7 +112,7 @@ def forgot_password():
     # On stocke en mémoire
     auth_services._pending_resets[email] = {
         'code': verification_code,
-        'expires_at': expires_at
+        'expires_at': expiration_time
     }
 
     # On envoie l'email via le service
