@@ -16,9 +16,7 @@ class User(db.Model):
     wallet_balance = db.Column(db.Numeric(10, 2), default=0.00)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    reset_password_code = db.Column(db.String(6), nullable=True)
-    reset_password_expiration = db.Column(db.DateTime, nullable=True)
-
+    
     def __repr__(self):
         return f'<User {self.email}>'
 
