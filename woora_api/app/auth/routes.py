@@ -67,3 +67,22 @@ def login():
     except Exception as e:
         current_app.logger.error(f'Erreur lors de la connexion: {e}', exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
+
+# --- AJOUTEZ CETTE NOUVELLE FONCTION ---
+@auth_bp.route('/profile', methods=['GET'])
+@jwt_required()
+def get_user_profile():
+    """
+    Récupère les informations du profil de l'utilisateur actuellement connecté.
+    """
+    # Récupère l'ID de l'utilisateur depuis le token JWT
+    current_user_id = get_jwt_identity()
+    
+    # Cherche l'utilisateur dans la base de données
+    user = User.query.get(current_user_id)
+    
+    if not user:
+        return jsonify({"message": "Utilisateur non trouvé."}), 404
+        
+    # Utilise la méthode to_dict() que nous avons déjà sur le modèle User
+    return jsonify(user.to_dict()), 200
