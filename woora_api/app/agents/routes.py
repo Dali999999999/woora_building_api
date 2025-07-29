@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, current_app
-from app.models import Property, User
+from app.models import Property, User, Referral # On ajoute Referral ici
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 # On crée un nouveau "blueprint" spécifiquement pour les agents
