@@ -102,3 +102,42 @@ def create_or_get_referral_code(property_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la création du code de parrainage: {e}", exc_info=True)
         return jsonify({'message': "Erreur interne du serveur."}), 500
+
+@agents_bp.route('/referrals', methods=['GET'])
+@jwt_required()
+def get_agent_referrals_with_details():
+    """
+    Récupère tous les codes de parrainage de l'agent connecté, avec les détails
+    du bien associé et la liste des clients ayant utilisé chaque code.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    # On récupère tous les parrainages de l'agent
+    referrals = Referral.query.filter_by(agent_id=current_user_id).all()
+    
+    response_data = []
+    for referral in referrals:
+        # Pour chaque parrainage, on construit un dictionnaire détaillé
+        
+        # On récupère les clients qui ont utilisé ce code
+        customers_who_used_code = []
+        for visit in referral.visit_requests: # Grâce à la relation ajoutée dans le modèle
+            customer = visit.customer
+            if customer:
+                customers_who_used_code.append({
+                    'full_name': f"{customer.first_name or ''} {customer.last_name or ''}".strip()
+                })
+
+        response_data.append({
+            'id': referral.id,
+            'referral_code': referral.referral_code,
+            'property_id': referral.property_id,
+            'property_title': referral.property.title if referral.property else "Bien supprimé",
+            'customers': customers_who_used_code
+        })
+
+    return jsonify(response_data), 200
