@@ -14,6 +14,7 @@ class User(db.Model):
     # Si vous utilisez bien 'customer', remplacez 'customer' par 'customer' ici.
     role = db.Column(db.Enum('owner', 'agent', 'customer', 'admin'), nullable=False) 
     wallet_balance = db.Column(db.Numeric(10, 2), default=0.00)
+    visit_passes = db.Column(db.Integer, nullable=False, default=0) # Nouvelle colonne
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -29,6 +30,7 @@ class User(db.Model):
             'phone_number': self.phone_number,
             'role': self.role,
             'wallet_balance': float(self.wallet_balance) if self.wallet_balance is not None else None,
+            'visit_passes': self.visit_passes, # Ajout du champ
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
