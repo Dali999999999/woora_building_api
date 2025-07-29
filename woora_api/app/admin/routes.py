@@ -344,13 +344,7 @@ def get_visit_requests():
     return jsonify(result), 200
 
 @admin_bp.route('/visit_requests/<int:request_id>/confirm', methods=['PUT'])
-@jwt_required()
 def confirm_visit_request(request_id):
-    current_user_id = get_jwt_identity()
-    admin_user = User.query.get(current_user_id)
-
-    if not admin_user or admin_user.role != 'admin':
-        return jsonify({'message': 'Accès refusé. Seuls les administrateurs peuvent confirmer les demandes de visite.'}), 403
 
     visit_request = VisitRequest.query.get(request_id)
     if not visit_request:
@@ -385,11 +379,7 @@ def confirm_visit_request(request_id):
 
 @admin_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
 def reject_visit_request_by_admin(request_id):
-    # current_user_id = get_jwt_identity()
-    # admin_user = User.query.get(current_user_id)
-
-    # if not admin_user or admin_user.role != 'admin':
-    #     return jsonify({'message': 'Accès refusé. Seuls les administrateurs peuvent rejeter les demandes de visite.'}), 403
+    # Protections JWT et vérifications de rôle retirées comme demandé.
 
     visit_request = VisitRequest.query.get(request_id)
     if not visit_request:
