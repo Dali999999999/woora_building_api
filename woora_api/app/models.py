@@ -209,6 +209,7 @@ class Referral(db.Model):
     __table_args__ = (db.UniqueConstraint('agent_id', 'property_id', name='unique_agent_property'),)
     agent = db.relationship('User', backref='referrals')
     property = db.relationship('Property', backref='referrals_received')
+    visit_requests = db.relationship('VisitRequest', backref='referral', lazy='dynamic')
 
 class VisitRequest(db.Model):
     __tablename__ = 'VisitRequests'
