@@ -2,9 +2,10 @@
 
 from flask import Blueprint, request, jsonify, current_app
 from app import db
-from app.models import Property, PropertyImage, User, PropertyType
+from app.models import Property, PropertyImage, User, PropertyType, VisitRequest
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
+from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
 
 owners_bp = Blueprint('owners', __name__, url_prefix='/owners')
 
@@ -331,3 +332,121 @@ def delete_owner_property(property_id):
         current_app.logger.error(f"Erreur lors de la suppression du bien immobilier (rollback): {e}", exc_info=True)
         # CORRECTION
         return jsonify({'message': "Erreur lors de la suppression du bien immobilier.", 'error': str(e)}), 500
+
+@owners_bp.route('/visit_requests', methods=['GET'])
+@jwt_required()
+def get_owner_visit_requests():
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': 'Accès refusé. Seuls les propriétaires peuvent voir leurs demandes de visite.'}), 403
+
+    # Récupérer les IDs des propriétés de cet propriétaire
+    owner_properties_ids = [p.id for p in Property.query.filter_by(owner_id=current_user_id).all()]
+
+    # Récupérer les demandes de visite pour ces propriétés qui sont 'confirmed'
+    visit_requests = VisitRequest.query.filter(
+        VisitRequest.property_id.in_(owner_properties_ids),
+        VisitRequest.status == 'confirmed'
+    ).all()
+
+    result = []
+    for req in visit_requests:
+        customer = User.query.get(req.customer_id)
+        property_obj = Property.query.get(req.property_id)
+        req_dict = {
+            'id': req.id,
+            'customer_name': f'{customer.first_name} {customer.last_name}' if customer else 'N/A',
+            'customer_email': customer.email if customer else 'N/A',
+            'property_title': property_obj.title if property_obj else 'N/A',
+            'requested_datetime': req.requested_datetime.isoformat(),
+            'status': req.status,
+            'message': req.message,
+            'created_at': req.created_at.isoformat()
+        }
+        result.append(req_dict)
+    return jsonify(result), 200
+
+@owners_bp.route('/visit_requests/<int:request_id>/accept', methods=['PUT'])
+@jwt_required()
+def accept_visit_request_by_owner(request_id):
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': 'Accès refusé. Seuls les propriétaires peuvent accepter les demandes de visite.'}), 403
+
+    visit_request = VisitRequest.query.get(request_id)
+    if not visit_request:
+        return jsonify({'message': 'Demande de visite non trouvée.'}), 404
+
+    # Vérifier que la demande est bien pour une propriété de cet propriétaire
+    property_obj = Property.query.get(visit_request.property_id)
+    if not property_obj or property_obj.owner_id != current_user_id:
+        return jsonify({'message': 'Demande de visite non associée à vos propriétés.'}), 403
+
+    if visit_request.status != 'confirmed':
+        return jsonify({'message': 'La demande de visite n\'est pas en attente d\'acceptation.'}), 400
+
+    visit_request.status = 'accepted'
+
+    try:
+        db.session.commit()
+
+        # Envoyer un e-mail au client
+        customer = User.query.get(visit_request.customer_id)
+        if customer and property_obj:
+            send_owner_acceptance_notification(
+                customer.email,
+                property_obj.title,
+                visit_request.requested_datetime.strftime('%Y-%m-%d %H:%M')
+            )
+
+        return jsonify({'message': 'Demande de visite acceptée avec succès. Notification envoyée au client.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de l\'acceptation de la demande de visite par le propriétaire: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+@owners_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
+@jwt_required()
+def reject_visit_request_by_owner(request_id):
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': 'Accès refusé. Seuls les propriétaires peuvent rejeter les demandes de visite.'}), 403
+
+    visit_request = VisitRequest.query.get(request_id)
+    if not visit_request:
+        return jsonify({'message': 'Demande de visite non trouvée.'}), 404
+
+    # Vérifier que la demande est bien pour une propriété de cet propriétaire
+    property_obj = Property.query.get(visit_request.property_id)
+    if not property_obj or property_obj.owner_id != current_user_id:
+        return jsonify({'message': 'Demande de visite non associée à vos propriétés.'}), 403
+
+    if visit_request.status != 'confirmed':
+        return jsonify({'message': 'La demande de visite n\'est pas en attente de rejet.'}), 400
+
+    visit_request.status = 'rejected'
+    message = request.get_json().get('message', 'Demande rejetée par le propriétaire.')
+
+    try:
+        db.session.commit()
+
+        # Envoyer un e-mail au client
+        customer = User.query.get(visit_request.customer_id)
+        if customer and property_obj:
+            send_owner_rejection_notification(
+                customer.email,
+                property_obj.title,
+                message
+            )
+
+        return jsonify({'message': 'Demande de visite rejetée avec succès. Notification envoyée au client.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors du rejet de la demande de visite par le propriétaire: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
