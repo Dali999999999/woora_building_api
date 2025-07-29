@@ -238,3 +238,71 @@ def upload_image():
     else:
         return jsonify({"error": "Fichier invalide ou non traité"}), 400
 
+@admin_bp.route('/settings/visits', methods=['GET'])
+def get_visit_settings():
+    """Récupère la configuration actuelle des visites."""
+    try:
+        free_passes_setting = AppSetting.query.filter_by(setting_key='initial_free_visit_passes').first()
+        pass_price_setting = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+
+        settings = {
+            'initial_free_visit_passes': int(free_passes_setting.setting_value) if free_passes_setting else 0,
+            'visit_pass_price': float(pass_price_setting.amount) if pass_price_setting else 0.0
+        }
+        
+        return jsonify(VisitSettingsSchema().dump(settings)), 200
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des paramètres de visite: {e}", exc_info=True)
+        return jsonify({"message": "Erreur interne du serveur."}), 500
+
+
+@admin_bp.route('/settings/visits', methods=['PUT'])
+def update_visit_settings():
+    """Met à jour la configuration des visites."""
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"message": "Données JSON non fournies."}), 400
+
+    try:
+        # Validation des données
+        data = VisitSettingsSchema().load(json_data)
+    except ValidationError as err:
+        return jsonify(err.messages), 422
+
+    try:
+        # Mise à jour du nombre de pass gratuits
+        free_passes_setting = AppSetting.query.filter_by(setting_key='initial_free_visit_passes').first()
+        if free_passes_setting:
+            free_passes_setting.setting_value = str(data['initial_free_visit_passes'])
+        else:
+            free_passes_setting = AppSetting(
+                setting_key='initial_free_visit_passes',
+                setting_value=str(data['initial_free_visit_passes']),
+                data_type='integer',
+                description='Nombre de pass de visite gratuits offerts à l\'inscription.'
+            )
+            db.session.add(free_passes_setting)
+
+        # Mise à jour du prix du pass
+        pass_price_setting = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+        if pass_price_setting:
+            pass_price_setting.amount = data['visit_pass_price']
+        else:
+            pass_price_setting = ServiceFee(
+                service_key='visit_pass_purchase',
+                name='Achat de Pass de Visite',
+                amount=data['visit_pass_price'],
+                applicable_to_role='customer',
+                description='Permet à un client d\'acheter un pass pour effectuer une demande de visite.'
+            )
+            db.session.add(pass_price_setting)
+        
+        db.session.commit()
+        
+        return jsonify({"message": "Paramètres de visite mis à jour avec succès."}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la mise à jour des paramètres de visite: {e}", exc_info=True)
+        return jsonify({"message": "Erreur interne du serveur."}), 500
+
