@@ -118,3 +118,27 @@ def send_owner_rejection_notification(customer_email, property_title, message):
     except Exception as e:
         current_app.logger.error(f"Erreur lors de l\'envoi de l\'email de rejet propriétaire: {e}", exc_info=True)
         return False
+
+def send_referral_used_notification(agent_email, customer_name, property_title):
+    """
+    Notifie un agent que son code de parrainage a été utilisé pour une demande de visite.
+    """
+    msg = Message(
+        subject="Votre code de parrainage a été utilisé !",
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[agent_email]
+    )
+    msg.body = f"""
+    Bonjour,
+
+    Bonne nouvelle ! Le client {customer_name} a utilisé votre code de parrainage pour demander une visite du bien suivant :
+    "{property_title}".
+
+    Nous vous tiendrons informé de la suite des événements.
+
+    L'équipe Woora Immo
+    """
+    try:
+        mail.send(msg)
+    except Exception as e:
+        current_app.logger.error(f"Échec de l'envoi de l'email de notification de parrainage à {agent_email}: {e}")
