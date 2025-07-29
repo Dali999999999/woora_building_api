@@ -336,108 +336,120 @@ def delete_owner_property(property_id):
 @owners_bp.route('/visit_requests', methods=['GET'])
 @jwt_required()
 def get_owner_visit_requests():
+    """
+    Récupère toutes les demandes de visite pour les biens d'un propriétaire,
+    à condition que la demande ait été confirmée par un administrateur.
+    """
     current_user_id = get_jwt_identity()
-    owner = User.query.get(current_user_id)
-
-    if not owner or owner.role != 'owner':
-        return jsonify({'message': 'Accès refusé. Seuls les propriétaires peuvent voir leurs demandes de visite.'}), 403
-
-    # Récupérer les IDs des propriétés de cet propriétaire
-    owner_properties_ids = [p.id for p in Property.query.filter_by(owner_id=current_user_id).all()]
-
-    # Récupérer les demandes de visite pour ces propriétés qui sont 'confirmed'
-    visit_requests = VisitRequest.query.filter(
-        VisitRequest.property_id.in_(owner_properties_ids),
-        VisitRequest.status == 'confirmed'
+    
+    # On fait une jointure pour ne récupérer que les demandes de visite (vr)
+    # qui appartiennent à des biens (Property) dont l'owner_id est celui de l'utilisateur connecté.
+    # C'est la requête la plus sûre et la plus efficace.
+    visit_requests = db.session.query(VisitRequest).join(Property).filter(
+        Property.owner_id == current_user_id,
+        VisitRequest.status == 'confirmed' # On ne montre que celles à traiter
     ).all()
 
+    # On construit la réponse
     result = []
     for req in visit_requests:
-        customer = User.query.get(req.customer_id)
-        property_obj = Property.query.get(req.property_id)
+        # Les relations back_populates nous permettent d'accéder facilement aux objets liés
+        customer = req.customer
+        property_obj = req.property
+        
         req_dict = {
             'id': req.id,
-            'customer_name': f'{customer.first_name} {customer.last_name}' if customer else 'N/A',
-            'customer_email': customer.email if customer else 'N/A',
-            'property_title': property_obj.title if property_obj else 'N/A',
+            'customer_name': f'{customer.first_name} {customer.last_name}' if customer else 'Client inconnu',
+            'customer_email': customer.email if customer else 'Email inconnu',
+            'property_title': property_obj.title if property_obj else 'Bien inconnu',
             'requested_datetime': req.requested_datetime.isoformat(),
             'status': req.status,
             'message': req.message,
             'created_at': req.created_at.isoformat()
         }
         result.append(req_dict)
+        
     return jsonify(result), 200
 
 @owners_bp.route('/visit_requests/<int:request_id>/accept', methods=['PUT'])
 @jwt_required()
 def accept_visit_request_by_owner(request_id):
+    """
+    Accepte une demande de visite.
+    La logique de vérification est maintenant unifiée et robuste.
+    """
     current_user_id = get_jwt_identity()
-    owner = User.query.get(current_user_id)
 
-    if not owner or owner.role != 'owner':
-        return jsonify({'message': 'Accès refusé. Seuls les propriétaires peuvent accepter les demandes de visite.'}), 403
+    # On fait une requête unique qui trouve la demande ET vérifie l'appartenance.
+    # On cherche une VisitRequest...
+    visit_request = db.session.query(VisitRequest).join(Property).filter(
+        VisitRequest.id == request_id,              # ... avec le bon ID
+        Property.owner_id == current_user_id      # ... ET qui appartient à un bien du propriétaire connecté.
+    ).first()
 
-    visit_request = VisitRequest.query.get(request_id)
+    # Si la requête ne trouve rien, c'est soit que la demande n'existe pas,
+    # soit qu'elle n'appartient pas au propriétaire. La réponse est la même.
     if not visit_request:
-        return jsonify({'message': 'Demande de visite non trouvée.'}), 404
+        return jsonify({'message': "Demande de visite non trouvée ou non associée à vos propriétés."}), 404
 
-    # Vérifier que la demande est bien pour une propriété de cet propriétaire
-    property_obj = Property.query.get(visit_request.property_id)
-    if not property_obj or property_obj.owner_id != current_user_id:
-        return jsonify({'message': 'Demande de visite non associée à vos propriétés.'}), 403
-
+    # On vérifie que le statut est bien 'confirmed' avant d'agir
     if visit_request.status != 'confirmed':
-        return jsonify({'message': 'La demande de visite n\'est pas en attente d\'acceptation.'}), 400
+        return jsonify({'message': f"Cette demande ne peut pas être acceptée car son statut est '{visit_request.status}'."}), 400
 
     visit_request.status = 'accepted'
 
     try:
         db.session.commit()
 
-        # Envoyer un e-mail au client
-        customer = User.query.get(visit_request.customer_id)
+        # Envoyer une notification par e-mail au client
+        customer = visit_request.customer
+        property_obj = visit_request.property
         if customer and property_obj:
             send_owner_acceptance_notification(
                 customer.email,
                 property_obj.title,
-                visit_request.requested_datetime.strftime('%Y-%m-%d %H:%M')
+                visit_request.requested_datetime.strftime('%d/%m/%Y à %Hh%M')
             )
 
         return jsonify({'message': 'Demande de visite acceptée avec succès. Notification envoyée au client.'}), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erreur lors de l\'acceptation de la demande de visite par le propriétaire: {e}", exc_info=True)
+        current_app.logger.error(f"Erreur lors de l'acceptation de la demande de visite par le propriétaire: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
 
 @owners_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
 @jwt_required()
 def reject_visit_request_by_owner(request_id):
+    """
+    Rejette une demande de visite.
+    La logique de vérification est identique à celle de l'acceptation.
+    """
     current_user_id = get_jwt_identity()
-    owner = User.query.get(current_user_id)
 
-    if not owner or owner.role != 'owner':
-        return jsonify({'message': 'Accès refusé. Seuls les propriétaires peuvent rejeter les demandes de visite.'}), 403
+    # On utilise exactement la même requête de vérification que pour 'accept'
+    visit_request = db.session.query(VisitRequest).join(Property).filter(
+        VisitRequest.id == request_id,
+        Property.owner_id == current_user_id
+    ).first()
 
-    visit_request = VisitRequest.query.get(request_id)
     if not visit_request:
-        return jsonify({'message': 'Demande de visite non trouvée.'}), 404
-
-    # Vérifier que la demande est bien pour une propriété de cet propriétaire
-    property_obj = Property.query.get(visit_request.property_id)
-    if not property_obj or property_obj.owner_id != current_user_id:
-        return jsonify({'message': 'Demande de visite non associée à vos propriétés.'}), 403
+        return jsonify({'message': "Demande de visite non trouvée ou non associée à vos propriétés."}), 404
 
     if visit_request.status != 'confirmed':
-        return jsonify({'message': 'La demande de visite n\'est pas en attente de rejet.'}), 400
+        return jsonify({'message': f"Cette demande ne peut pas être rejetée car son statut est '{visit_request.status}'."}), 400
 
     visit_request.status = 'rejected'
-    message = request.get_json().get('message', 'Demande rejetée par le propriétaire.')
+    
+    # On récupère le message de rejet optionnel
+    data = request.get_json() or {}
+    message = data.get('message', 'La demande de visite a été rejetée par le propriétaire.')
 
     try:
         db.session.commit()
 
-        # Envoyer un e-mail au client
-        customer = User.query.get(visit_request.customer_id)
+        # Envoyer une notification par e-mail au client
+        customer = visit_request.customer
+        property_obj = visit_request.property
         if customer and property_obj:
             send_owner_rejection_notification(
                 customer.email,
