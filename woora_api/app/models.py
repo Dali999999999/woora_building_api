@@ -213,15 +213,16 @@ class Referral(db.Model):
 class VisitRequest(db.Model):
     __tablename__ = 'VisitRequests'
     id = db.Column(db.Integer, primary_key=True)
-    # CORRECTION : Le rôle 'customer' n'était pas dans votre Enum, je l'ai remplacé par 'seeker'
     customer_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
     property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
+    referral_id = db.Column(db.Integer, db.ForeignKey('Referrals.id', ondelete='SET NULL')) # Nouvelle colonne
     requested_datetime = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.Enum('pending', 'confirmed', 'rejected', 'completed'), nullable=False, default='pending')
+    status = db.Column(db.Enum('pending', 'confirmed', 'accepted', 'rejected', 'completed'), nullable=False, default='pending')
     message = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     customer = db.relationship('User', backref='visit_requests')
     property = db.relationship('Property', backref='visit_requests_received')
+    referral = db.relationship('Referral', backref='visit_requests') # Nouvelle relation
 
 class PropertyRequest(db.Model):
     __tablename__ = 'PropertyRequests'
