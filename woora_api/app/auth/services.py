@@ -35,6 +35,12 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
     if User.query.filter_by(email=email).first():
         raise ValueError('Un utilisateur avec cet e-mail existe déjà.')
 
+    # Logique spécifique pour la création d'un administrateur
+    if role == 'admin':
+        existing_admin = User.query.filter_by(role='admin').first()
+        if existing_admin:
+            raise ValueError('Un compte administrateur existe déjà. La création de plusieurs administrateurs via cette route n\'est pas autorisée.')
+
     hashed_password = generate_password_hash(password)
     verification_code = generate_verification_code()
     expires_at = datetime.utcnow() + timedelta(minutes=10) # Code valide 10 minutes
@@ -60,6 +66,7 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
         pass
 
     return True # Indique que l\'initiation de l\'inscription a réussi
+
 
 def verify_email_and_register(email, code):
     if email not in _pending_registrations:
