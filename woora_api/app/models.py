@@ -209,7 +209,7 @@ class Referral(db.Model):
     __table_args__ = (db.UniqueConstraint('agent_id', 'property_id', name='unique_agent_property'),)
     agent = db.relationship('User', backref='referrals')
     property = db.relationship('Property', backref='referrals_received')
-    visit_requests = db.relationship('VisitRequest', backref='referral', lazy='dynamic')
+    visit_requests = db.relationship('VisitRequest', back_populates='referral', lazy='dynamic')
 
 class VisitRequest(db.Model):
     __tablename__ = 'VisitRequests'
@@ -223,7 +223,7 @@ class VisitRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     customer = db.relationship('User', backref='visit_requests')
     property = db.relationship('Property', backref='visit_requests_received')
-    referral = db.relationship('Referral', backref='visit_requests') # Nouvelle relation
+    referral = db.relationship('Referral', back_populates='visit_requests')
 
 class PropertyRequest(db.Model):
     __tablename__ = 'PropertyRequests'
