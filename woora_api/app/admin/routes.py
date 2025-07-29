@@ -311,7 +311,6 @@ def update_visit_settings():
         return jsonify({"message": "Erreur interne du serveur."}), 500
 
 @admin_bp.route('/visit_requests', methods=['GET'])
-@jwt_required()
 def get_visit_requests():
     current_user_id = get_jwt_identity()
     admin_user = User.query.get(current_user_id)
@@ -344,7 +343,6 @@ def get_visit_requests():
     return jsonify(result), 200
 
 @admin_bp.route('/visit_requests/<int:request_id>/confirm', methods=['PUT'])
-@jwt_required()
 def confirm_visit_request(request_id):
     current_user_id = get_jwt_identity()
     admin_user = User.query.get(current_user_id)
@@ -384,7 +382,6 @@ def confirm_visit_request(request_id):
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
 
 @admin_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
-@jwt_required()
 def reject_visit_request_by_admin(request_id):
     current_user_id = get_jwt_identity()
     admin_user = User.query.get(current_user_id)
