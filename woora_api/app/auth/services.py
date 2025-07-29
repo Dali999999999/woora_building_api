@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token
 
 from app import db, mail
-from app.models import User
+from app.models import User, AppSetting
 
 # Stockage temporaire pour les inscriptions en attente de vérification
 # Clé: email, Valeur: {'data': user_data, 'code': verification_code, 'expires_at': datetime}
@@ -71,24 +71,35 @@ def verify_email_and_register(email, code):
         raise ValueError('Code de vérification invalide.')
 
     if datetime.utcnow() > pending_reg['expires_at']:
-        del _pending_registrations[email] # Supprimer l\'entrée expirée
+        del _pending_registrations[email] # Supprimer l'entrée expirée
         raise ValueError('Code de vérification expiré.')
 
-    # Créer l\'utilisateur dans la base de données
+    # Créer l'utilisateur dans la base de données
     user_data = pending_reg['data']
+    
+    # --- Logique d'attribution des pass de visite gratuits ---
+    if user_data['role'] == 'customer':
+        free_passes_setting = AppSetting.query.filter_by(setting_key='initial_free_visit_passes').first()
+        if free_passes_setting:
+            user_data['visit_passes'] = int(free_passes_setting.setting_value)
+        else:
+            user_data['visit_passes'] = 0 # Par défaut, si le paramètre n'est pas trouvé
+    # --- Fin de la logique ---
+
     user = User(
         email=user_data['email'],
         password_hash=user_data['password_hash'],
         first_name=user_data['first_name'],
         last_name=user_data['last_name'],
         phone_number=user_data['phone_number'],
-        role=user_data['role']
+        role=user_data['role'],
+        visit_passes=user_data.get('visit_passes', 0) # Ajout du champ ici
     )
 
     db.session.add(user)
     db.session.commit()
 
-    del _pending_registrations[email] # Supprimer l\'entrée après inscription réussie
+    del _pending_registrations[email] # Supprimer l'entrée après inscription réussie
 
     return user
 
