@@ -1,13 +1,15 @@
 
 
 from flask import Blueprint, jsonify, request, current_app
-from app.models import User, Property, PropertyType, PropertyAttribute, AttributeOption, PropertyAttributeScope, db, AppSetting, ServiceFee
+from app.models import User, Property, PropertyType, PropertyAttribute, AttributeOption, PropertyAttributeScope, db, AppSetting, ServiceFee, VisitRequest
 from app.schemas import VisitSettingsSchema
 from marshmallow import ValidationError
 from app.utils.mega_utils import get_mega_instance
 from werkzeug.utils import secure_filename
 import os
 import uuid
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.utils.email_utils import send_admin_rejection_notification, send_admin_confirmation_to_owner
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -307,4 +309,116 @@ def update_visit_settings():
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la mise à jour des paramètres de visite: {e}", exc_info=True)
         return jsonify({"message": "Erreur interne du serveur."}), 500
+
+@admin_bp.route('/visit_requests', methods=['GET'])
+@jwt_required()
+def get_visit_requests():
+    current_user_id = get_jwt_identity()
+    admin_user = User.query.get(current_user_id)
+
+    if not admin_user or admin_user.role != 'admin':
+        return jsonify({'message': 'Accès refusé. Seuls les administrateurs peuvent voir les demandes de visite.'}), 403
+
+    status_filter = request.args.get('status')
+    query = VisitRequest.query
+
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    
+    visit_requests = query.all()
+    result = []
+    for req in visit_requests:
+        customer = User.query.get(req.customer_id)
+        property_obj = Property.query.get(req.property_id)
+        req_dict = {
+            'id': req.id,
+            'customer_name': f'{customer.first_name} {customer.last_name}' if customer else 'N/A',
+            'customer_email': customer.email if customer else 'N/A',
+            'property_title': property_obj.title if property_obj else 'N/A',
+            'requested_datetime': req.requested_datetime.isoformat(),
+            'status': req.status,
+            'message': req.message,
+            'created_at': req.created_at.isoformat()
+        }
+        result.append(req_dict)
+    return jsonify(result), 200
+
+@admin_bp.route('/visit_requests/<int:request_id>/confirm', methods=['PUT'])
+@jwt_required()
+def confirm_visit_request(request_id):
+    current_user_id = get_jwt_identity()
+    admin_user = User.query.get(current_user_id)
+
+    if not admin_user or admin_user.role != 'admin':
+        return jsonify({'message': 'Accès refusé. Seuls les administrateurs peuvent confirmer les demandes de visite.'}), 403
+
+    visit_request = VisitRequest.query.get(request_id)
+    if not visit_request:
+        return jsonify({'message': 'Demande de visite non trouvée.'}), 404
+
+    if visit_request.status != 'pending':
+        return jsonify({'message': 'La demande de visite n\'est pas en attente de confirmation.'}), 400
+
+    visit_request.status = 'confirmed'
+    
+    try:
+        db.session.commit()
+
+        # Envoyer un e-mail au propriétaire
+        owner = User.query.get(Property.query.get(visit_request.property_id).owner_id)
+        customer = User.query.get(visit_request.customer_id)
+        property_obj = Property.query.get(visit_request.property_id)
+
+        if owner and customer and property_obj:
+            send_admin_confirmation_to_owner(
+                owner.email,
+                f'{customer.first_name} {customer.last_name}',
+                property_obj.title,
+                visit_request.requested_datetime.strftime('%Y-%m-%d %H:%M')
+            )
+
+        return jsonify({'message': 'Demande de visite confirmée avec succès. Notification envoyée au propriétaire.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la confirmation de la demande de visite: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+@admin_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
+@jwt_required()
+def reject_visit_request_by_admin(request_id):
+    current_user_id = get_jwt_identity()
+    admin_user = User.query.get(current_user_id)
+
+    if not admin_user or admin_user.role != 'admin':
+        return jsonify({'message': 'Accès refusé. Seuls les administrateurs peuvent rejeter les demandes de visite.'}), 403
+
+    visit_request = VisitRequest.query.get(request_id)
+    if not visit_request:
+        return jsonify({'message': 'Demande de visite non trouvée.'}), 404
+
+    if visit_request.status != 'pending':
+        return jsonify({'message': 'La demande de visite n\'est pas en attente de rejet.'}), 400
+
+    visit_request.status = 'rejected'
+    message = request.get_json().get('message', 'Demande rejetée par l\'administrateur.')
+
+    try:
+        db.session.commit()
+
+        # Envoyer un e-mail au client
+        customer = User.query.get(visit_request.customer_id)
+        property_obj = Property.query.get(visit_request.property_id)
+
+        if customer and property_obj:
+            send_admin_rejection_notification(
+                customer.email,
+                property_obj.title,
+                message
+            )
+
+        return jsonify({'message': 'Demande de visite rejetée avec succès. Notification envoyée au client.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors du rejet de la demande de visite par l\'admin: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
 
