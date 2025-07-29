@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify, current_app
 from app.models import Property, User, VisitRequest, Referral, db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
-from app.utils.email_utils import send_new_visit_request_notification
+from app.utils.email_utils import send_new_visit_request_notification, send_referral_used_notification
 
 seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
 
