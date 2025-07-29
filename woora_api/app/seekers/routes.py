@@ -96,3 +96,34 @@ def create_visit_request(property_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la création de la demande de visite: {e}", exc_info=True)
         return jsonify({'message': "Erreur interne du serveur."}), 500
+
+@seekers_bp.route('/visit_requests', methods=['GET'])
+@jwt_required()
+def get_customer_visit_requests():
+    current_user_id = get_jwt_identity()
+    customer = User.query.get(current_user_id)
+
+    if not customer or customer.role != 'customer':
+        return jsonify({'message': 'Accès refusé. Seuls les clients peuvent voir leurs demandes de visite.'}), 403
+
+    status_filter = request.args.get('status')
+    query = VisitRequest.query.filter_by(customer_id=current_user_id)
+
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    
+    visit_requests = query.all()
+    result = []
+    for req in visit_requests:
+        property_obj = Property.query.get(req.property_id)
+        req_dict = {
+            'id': req.id,
+            'property_id': req.property_id,
+            'property_title': property_obj.title if property_obj else 'N/A',
+            'requested_datetime': req.requested_datetime.isoformat(),
+            'status': req.status,
+            'message': req.message,
+            'created_at': req.created_at.isoformat()
+        }
+        result.append(req_dict)
+    return jsonify(result), 200
