@@ -366,7 +366,10 @@ def get_eligible_buyers_for_property(property_id):
     property_obj = Property.query.get_or_404(property_id)
     
     # Récupérer les demandes de visite pour ce bien qui sont 'accepted'
-    eligible_visits = db.session.query(VisitRequest, User).\n        join(User, VisitRequest.customer_id == User.id).\n        filter(VisitRequest.property_id == property_id, VisitRequest.status == 'accepted').\n        all()
+    eligible_visits = db.session.query(VisitRequest, User)
+    join(User, VisitRequest.customer_id == User.id)
+    filter(VisitRequest.property_id == property_id, VisitRequest.status == 'accepted')
+    all()
     
     result = []
     for visit_req, customer in eligible_visits:
