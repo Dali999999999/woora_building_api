@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, current_app
-from app.models import Property, User, Referral # On ajoute Referral ici
+from app.models import Property, User, Referral, Commission # On ajoute Commission ici
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.utils.helpers import generate_unique_referral_code 
 from app import db
