@@ -358,8 +358,100 @@ def update_agent_commission_setting():
         current_app.logger.error(f"Erreur lors de la mise à jour du paramètre de commission agent: {e}", exc_info=True)
         return jsonify({"message": "Erreur interne du serveur."}), 500
 
-@admin_bp.route('/visit_requests', methods=['GET'])
-@jwt_required()
+@admin_bp.route('/properties/<int:property_id>/eligible_buyers', methods=['GET'])
+def get_eligible_buyers_for_property(property_id):
+    """
+    Récupère les utilisateurs ayant des demandes de visite acceptées pour un bien spécifique.
+    """
+    property_obj = Property.query.get_or_404(property_id)
+    
+    # Récupérer les demandes de visite pour ce bien qui sont 'accepted'
+    eligible_visits = db.session.query(VisitRequest, User).\n        join(User, VisitRequest.customer_id == User.id).\n        filter(VisitRequest.property_id == property_id, VisitRequest.status == 'accepted').\n        all()
+    
+    result = []
+    for visit_req, customer in eligible_visits:
+        result.append({
+            'visit_request_id': visit_req.id,
+            'customer_id': customer.id,
+            'customer_name': f'{customer.first_name} {customer.last_name}',
+            'customer_email': customer.email,
+            'requested_datetime': visit_req.requested_datetime.isoformat(),
+            'has_referral_code': visit_req.referral_id is not None
+        })
+    return jsonify(result), 200
+
+@admin_bp.route('/properties/<int:property_id>/mark_as_transacted', methods=['PUT'])
+def mark_property_as_transacted(property_id):
+    """
+    Met à jour le statut d'un bien (vendu/loué) et gère la commission de l'agent si applicable.
+    """
+    data = request.get_json()
+    new_status = data.get('status')
+    winning_visit_request_id = data.get('winning_visit_request_id')
+
+    if new_status not in ['sold', 'rented']:
+        return jsonify({'message': 'Statut invalide. Doit être "sold" ou "rented".'}), 400
+
+    property_obj = Property.query.get_or_404(property_id)
+
+    try:
+        property_obj.status = new_status
+        property_obj.winning_visit_request_id = winning_visit_request_id
+
+        # Gérer la commission si une visite gagnante est spécifiée
+        if winning_visit_request_id:
+            visit_request = VisitRequest.query.get(winning_visit_request_id)
+            if not visit_request:
+                return jsonify({'message': 'Demande de visite gagnante non trouvée.'}), 404
+
+            if visit_request.property_id != property_id:
+                return jsonify({'message': 'La demande de visite ne correspond pas à ce bien.'}), 400
+
+            if visit_request.referral_id:
+                referral = Referral.query.get(visit_request.referral_id)
+                if referral and referral.agent_id:
+                    agent = User.query.get(referral.agent_id)
+                    if agent and agent.role == 'agent':
+                        # Récupérer le pourcentage de commission
+                        commission_setting = AppSetting.query.filter_by(setting_key='agent_commission_percentage').first()
+                        commission_percentage = float(commission_setting.setting_value) if commission_setting else 0.05 # 5% par défaut
+
+                        commission_amount = (property_obj.price * commission_percentage) / 100
+
+                        # Ajouter la commission
+                        new_commission = Commission(
+                            agent_id=agent.id,
+                            property_id=property_obj.id,
+                            amount=commission_amount,
+                            status='paid' # Ou 'pending' si un processus de validation est nécessaire
+                        )
+                        db.session.add(new_commission)
+
+                        # Mettre à jour le solde du portefeuille de l'agent
+                        agent.wallet_balance += commission_amount
+
+                        # Enregistrer la transaction
+                        new_transaction = Transaction(
+                            user_id=agent.id,
+                            amount=commission_amount,
+                            type='commission_payout',
+                            description=f'Commission pour la vente/location du bien {property_obj.title}'
+                        )
+                        db.session.add(new_transaction)
+                    else:
+                        current_app.logger.warning(f"Agent (ID: {referral.agent_id}) non trouvé ou n'est pas un agent pour le parrainage {referral.id}.")
+                else:
+                    current_app.logger.warning(f"Parrainage (ID: {visit_request.referral_id}) non trouvé ou sans agent associé.")
+            else:
+                current_app.logger.info(f"Aucun code de parrainage utilisé pour la visite {visit_request.id}.")
+        
+        db.session.commit()
+        return jsonify({'message': f'Bien mis à jour en tant que {new_status} avec succès.', 'property': property_obj.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la mise à jour du statut du bien {property_id}: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur lors de la mise à jour du statut du bien.'}), 500
 def get_visit_requests():
     current_user_id = get_jwt_identity()
     admin_user = User.query.get(current_user_id)
