@@ -457,6 +457,40 @@ def mark_property_as_transacted(property_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la mise à jour du statut du bien {property_id}: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur lors de la mise à jour du statut du bien.'}), 500
+
+@admin_bp.route('/visit_requests', methods=['GET'])
+def get_visit_requests():
+    current_user_id = get_jwt_identity()
+    admin_user = User.query.get(current_user_id)
+
+    if not admin_user or admin_user.role != 'admin':
+        return jsonify({'message': 'Accès refusé. Seuls les administrateurs peuvent voir les demandes de visite.'}), 403
+
+    status_filter = request.args.get('status')
+    query = VisitRequest.query
+
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    
+    visit_requests = query.all()
+    result = []
+    for req in visit_requests:
+        customer = User.query.get(req.customer_id)
+        property_obj = Property.query.get(req.property_id)
+        req_dict = {
+            'id': req.id,
+            'customer_name': f'{customer.first_name} {customer.last_name}' if customer else 'N/A',
+            'customer_email': customer.email if customer else 'N/A',
+            'property_title': property_obj.title if property_obj else 'N/A',
+            'requested_datetime': req.requested_datetime.isoformat(),
+            'status': req.status,
+            'message': req.message,
+            'created_at': req.created_at.isoformat()
+        }
+        result.append(req_dict)
+    return jsonify(result), 200
+
+@admin_bp.route('/visit_requests', methods=['GET'])
 def get_visit_requests():
     current_user_id = get_jwt_identity()
     admin_user = User.query.get(current_user_id)
