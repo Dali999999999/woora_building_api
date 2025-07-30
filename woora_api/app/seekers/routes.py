@@ -1,27 +1,42 @@
-
 # app/seekers/routes.py
 
 from flask import Blueprint, request, jsonify, current_app
-from app.models import Property, User, VisitRequest, Referral, db
+from app.models import Property, User, VisitRequest, Referral
+from app import db # Assurez-vous que l'import de 'db' est correct
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
-from app.utils.email_utils import send_new_visit_request_notification, send_referral_used_notification
+
+# Assurez-vous que le chemin vers vos utilitaires d'email est correct
+try:
+    from app.utils.email_utils import send_new_visit_request_notification, send_referral_used_notification
+except ImportError:
+    # Crée des fonctions factices si le fichier n'existe pas encore pour éviter une erreur d'import
+    def send_new_visit_request_notification(*args, **kwargs): pass
+    def send_referral_used_notification(*args, **kwargs): pass
+
 
 seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
 
 @seekers_bp.route('/properties', methods=['GET'])
 @jwt_required()
 def get_all_properties_for_seeker():
+    """
+    Récupère tous les biens immobiliers.
+    Accessible par n'importe quel utilisateur authentifié.
+    """
     properties = Property.query.all()
     return jsonify([p.to_dict() for p in properties]), 200
 
 @seekers_bp.route('/properties/<int:property_id>', methods=['GET'])
 @jwt_required()
 def get_property_details_for_seeker(property_id):
-    property = Property.query.get(property_id)
-    if not property:
+    """
+    Récupère les détails d'un bien immobilier spécifique.
+    """
+    property_obj = Property.query.get(property_id)
+    if not property_obj:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
-    return jsonify(property.to_dict()), 200
+    return jsonify(property_obj.to_dict()), 200
 
 @seekers_bp.route('/properties/<int:property_id>/visit-requests', methods=['POST'])
 @jwt_required()
@@ -29,17 +44,18 @@ def create_visit_request(property_id):
     """
     Permet à un client de soumettre une demande de visite.
     Décrémente toujours un pass de visite.
-    Si un code de parrainage est utilisé, il lie la demande à l'agent et le notifie.
+    Vérifie qu'un code de parrainage n'a pas déjà été utilisé pour ce bien par ce client.
+    Si un code est utilisé, il lie la demande à l'agent et le notifie.
     """
     current_user_id = get_jwt_identity()
     customer = User.query.get(current_user_id)
 
-    # Note: Votre modèle User utilise 'customer', assurez-vous que c'est bien le rôle des chercheurs.
-    # Si c'est 'seeker', changez la condition ici.
-    if not customer or customer.role != 'customer':
+    if not customer:
+        return jsonify({'message': "Utilisateur non trouvé."}), 404
+        
+    if customer.role != 'customer':
         return jsonify({'message': "Accès refusé. Seuls les clients peuvent faire des demandes de visite."}), 403
 
-    # Vérification que le bien existe
     property_obj = Property.query.get(property_id)
     if not property_obj:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
@@ -60,15 +76,12 @@ def create_visit_request(property_id):
     except ValueError:
         return jsonify({'message': "Format de date invalide. Utilisez le format ISO 8601."}), 400
 
-    # Étape 1 : Vérification OBLIGATOIRE des pass de visite
     if customer.visit_passes <= 0:
-        return jsonify({'message': "Vous n'avez plus de pass de visite disponibles. Veuillez en acheter pour continuer."}), 402 # 402 Payment Required
+        return jsonify({'message': "Vous n'avez plus de pass de visite disponibles. Veuillez en acheter pour continuer."}), 402
 
-    # Étape 2 : Vérification du code de parrainage (si fourni)
     referral_id = None
     agent_to_notify = None
     if referral_code:
-        # On vérifie que le code est valide POUR CE BIEN PRÉCIS
         referral = Referral.query.filter_by(
             referral_code=referral_code,
             property_id=property_id
@@ -77,31 +90,36 @@ def create_visit_request(property_id):
         if not referral:
             return jsonify({'message': "Code de parrainage invalide ou non applicable pour ce bien."}), 400
         
-        referral_id = referral.id
-        agent_to_notify = referral.agent # On récupère l'objet agent pour la notification
+        # --- DÉBUT DE LA VÉRIFICATION DE RÉUTILISATION ---
+        existing_referred_visit = VisitRequest.query.filter(
+            VisitRequest.customer_id == current_user_id,
+            VisitRequest.property_id == property_id,
+            VisitRequest.referral_id.isnot(None)
+        ).first()
 
-    # Étape 3 : Création de la demande et décrémentation du pass
-    
-    # Décrémenter le pass de visite
+        if existing_referred_visit:
+            return jsonify({'message': "Vous avez déjà utilisé un code de parrainage pour une visite de ce bien."}), 400
+        # --- FIN DE LA VÉRIFICATION DE RÉUTILISATION ---
+        
+        referral_id = referral.id
+        agent_to_notify = referral.agent
+
     customer.visit_passes -= 1
 
-    # Créer la nouvelle demande de visite
     new_visit_request = VisitRequest(
         customer_id=current_user_id,
         property_id=property_id,
         requested_datetime=requested_datetime,
         message=message,
-        referral_id=referral_id # Ajout du referral_id (sera None s'il n'y a pas de code)
+        referral_id=referral_id
     )
 
     try:
-        db.session.add(customer) # Ajoute la modification du nombre de pass
+        db.session.add(customer)
         db.session.add(new_visit_request)
         db.session.commit()
 
-        # Étape 4 : Notifications
-        
-        # 4.1 Notifier l'administrateur (logique existante)
+        # Notifications
         admin_users = User.query.filter_by(role='admin').all()
         if admin_users:
             admin_email = admin_users[0].email 
@@ -113,7 +131,6 @@ def create_visit_request(property_id):
                 message
             )
 
-        # 4.2 Notifier l'agent si son code a été utilisé
         if agent_to_notify:
             send_referral_used_notification(
                 agent_email=agent_to_notify.email,
@@ -130,6 +147,9 @@ def create_visit_request(property_id):
 @seekers_bp.route('/visit_requests', methods=['GET'])
 @jwt_required()
 def get_customer_visit_requests():
+    """
+    Récupère l'historique des demandes de visite pour le client connecté.
+    """
     current_user_id = get_jwt_identity()
     customer = User.query.get(current_user_id)
 
@@ -142,14 +162,14 @@ def get_customer_visit_requests():
     if status_filter:
         query = query.filter_by(status=status_filter)
     
-    visit_requests = query.all()
+    visit_requests = query.order_by(VisitRequest.created_at.desc()).all()
     result = []
     for req in visit_requests:
-        property_obj = Property.query.get(req.property_id)
+        property_obj = req.property
         req_dict = {
             'id': req.id,
             'property_id': req.property_id,
-            'property_title': property_obj.title if property_obj else 'N/A',
+            'property_title': property_obj.title if property_obj else 'Bien supprimé ou introuvable',
             'requested_datetime': req.requested_datetime.isoformat(),
             'status': req.status,
             'message': req.message,
