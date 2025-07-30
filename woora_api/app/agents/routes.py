@@ -141,3 +141,37 @@ def get_agent_referrals_with_details():
         })
 
     return jsonify(response_data), 200
+
+@agents_bp.route('/commissions', methods=['GET'])
+@jwt_required()
+def get_agent_commissions():
+    """
+    Récupère le solde du portefeuille de l'agent et la liste détaillée de ses commissions.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    # Récupérer toutes les commissions pour cet agent, triées par date (la plus récente en premier)
+    commissions = Commission.query.filter_by(agent_id=current_user_id).order_by(Commission.created_at.desc()).all()
+    
+    # Formater la liste des commissions
+    commission_list = []
+    for comm in commissions:
+        commission_list.append({
+            'id': comm.id,
+            'amount': float(comm.amount) if comm.amount is not None else 0.0,
+            'status': comm.status,
+            'created_at': comm.created_at.isoformat(),
+            'property_title': comm.property.title if comm.property else "Bien supprimé"
+        })
+
+    # Construire la réponse finale
+    response_data = {
+        'wallet_balance': float(agent.wallet_balance) if agent.wallet_balance is not None else 0.0,
+        'commissions': commission_list
+    }
+
+    return jsonify(response_data), 200
