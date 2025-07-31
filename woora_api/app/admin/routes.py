@@ -10,6 +10,7 @@ from app.utils.mega_utils import get_mega_instance
 from werkzeug.utils import secure_filename
 import os
 import uuid
+from decimal import Decimal
 from app.utils.email_utils import send_admin_rejection_notification, send_admin_confirmation_to_owner
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -316,35 +317,73 @@ def get_eligible_buyers_for_property(property_id):
 
 # ------------- TRANSACTION -------------
 @admin_bp.route('/properties/<int:property_id>/mark_as_transacted', methods=['PUT'])
+# @jwt_required() # Assurez-vous que cette route est protégée
+# @admin_required # Et accessible uniquement par les admins
 def mark_property_as_transacted(property_id):
+    """
+    Marque un bien comme 'vendu' ou 'loué' et génère la commission
+    de l'agent parrain, le cas échéant.
+    """
     data = request.get_json()
     new_status = data.get('status')
     winning_visit_id = data.get('winning_visit_request_id')
+
     if new_status not in ['sold', 'rented']:
-        return jsonify({'message': 'Statut invalide.'}), 400
+        return jsonify({'message': 'Le statut doit être "sold" ou "rented".'}), 400
 
     prop = Property.query.get_or_404(property_id)
     prop.status = new_status
     prop.winning_visit_request_id = winning_visit_id
 
+    # Si une visite gagnante est spécifiée, on traite la commission
     if winning_visit_id:
         vr = VisitRequest.query.get(winning_visit_id)
         if not vr or vr.property_id != property_id:
-            return jsonify({'message': 'Demande invalide.'}), 400
+            return jsonify({'message': 'ID de la demande de visite invalide ou ne correspondant pas au bien.'}), 400
+        
+        # Si cette visite est liée à un parrainage
         if vr.referral_id:
             ref = Referral.query.get(vr.referral_id)
             if ref and ref.agent_id:
                 agent = User.query.get(ref.agent_id)
                 if agent and agent.role == 'agent':
-                    pct = float(AppSetting.query.filter_by(setting_key='agent_commission_percentage').first().setting_value or 5)
-                    commission = (prop.price * pct) / 100
-                    db.session.add(Commission(agent_id=agent.id, property_id=prop.id, amount=commission, status='paid'))
-                    agent.wallet_balance += commission
-                    db.session.add(Transaction(user_id=agent.id, amount=commission, type='commission_payout',
-                                               description=f'Commission pour {prop.title}'))
+                    # Récupérer le pourcentage de commission depuis les paramètres
+                    commission_setting = AppSetting.query.filter_by(setting_key='agent_commission_percentage').first()
+                    # Utiliser une valeur par défaut de 5.0 si le paramètre n'existe pas
+                    pct_str = commission_setting.setting_value if commission_setting else "5.0"
+                    
+                    # --- DÉBUT DE LA CORRECTION ---
+                    try:
+                        # Convertir le prix (Decimal) et le pourcentage (String) en Decimal pour le calcul
+                        price_decimal = Decimal(prop.price)
+                        pct_decimal = Decimal(pct_str)
+                        
+                        # Calculer la commission en utilisant uniquement des Decimals
+                        commission_amount = (price_decimal * pct_decimal) / Decimal(100)
+                        
+                        # Arrondir au centime le plus proche
+                        commission_amount = round(commission_amount, 2)
+
+                    except (TypeError, ValueError):
+                        current_app.logger.error("La valeur du pourcentage de commission est invalide.")
+                        return jsonify({'message': 'Erreur de configuration du pourcentage de commission.'}), 500
+                    # --- FIN DE LA CORRECTION ---
+
+                    # Ajouter la commission à la base de données
+                    db.session.add(Commission(agent_id=agent.id, property_id=prop.id, amount=commission_amount, status='paid'))
+                    
+                    # Mettre à jour le portefeuille de l'agent
+                    if agent.wallet_balance is None:
+                        agent.wallet_balance = Decimal(0)
+                    agent.wallet_balance += commission_amount
+                    
+                    # Enregistrer la transaction
+                    db.session.add(Transaction(user_id=agent.id, amount=commission_amount, type='commission_payout',
+                                               description=f'Commission pour la transaction du bien: {prop.title}'))
     try:
         db.session.commit()
-        return jsonify({'message': f'Bien {new_status}.', 'property': prop.to_dict()}), 200
+        return jsonify({'message': f'Le bien a été marqué comme "{new_status}".', 'property': prop.to_dict()}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'message': 'Erreur.'}), 500
+        current_app.logger.error(f"Erreur lors du marquage comme 'transacted': {e}", exc_info=True)
+        return jsonify({'message': 'Une erreur est survenue lors de la sauvegarde.'}), 500
