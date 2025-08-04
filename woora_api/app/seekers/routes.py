@@ -21,10 +21,18 @@ seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
 @jwt_required()
 def get_all_properties_for_seeker():
     """
-    Récupère tous les biens immobiliers.
-    Accessible par n'importe quel utilisateur authentifié.
+    Endpoint pour les chercheurs.
+    Récupère TOUS les biens immobiliers qui sont actuellement 'à vendre' ou 'à louer'.
     """
-    properties = Property.query.all()
+    # Pas besoin de vérifier le rôle ici
+    
+    # --- DÉBUT DE LA CORRECTION ---
+    # On applique exactement le même filtre que pour les agents.
+    properties = Property.query.filter(
+        Property.status.in_(['for_sale', 'for_rent'])
+    ).all()
+    # --- FIN DE LA CORRECTION ---
+
     return jsonify([p.to_dict() for p in properties]), 200
 
 @seekers_bp.route('/properties/<int:property_id>', methods=['GET'])
