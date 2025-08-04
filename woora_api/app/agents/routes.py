@@ -12,21 +12,22 @@ agents_bp = Blueprint('agents', __name__, url_prefix='/agents')
 def get_all_properties_for_agent():
     """
     Endpoint pour les agents.
-    Récupère tous les biens immobiliers publiés par les propriétaires.
-    À l'avenir, on pourrait ajouter un filtre, par exemple, pour ne montrer que les biens validés.
+    Récupère TOUS les biens immobiliers qui sont actuellement 'à vendre' ou 'à louer'.
     """
     current_user_id = get_jwt_identity()
     agent = User.query.get(current_user_id)
     
-    # Étape de sécurité : on vérifie que l'utilisateur est bien un agent
     if not agent or agent.role != 'agent':
         return jsonify({'message': "Accès non autorisé. Seuleument les agents peuvent accéder à cette ressource."}), 403
 
-    # On récupère tous les biens.
-    # Pour une application en production, on filtrerait sûrement par `is_validated=True`
-    properties = Property.query.all()
+    # --- DÉBUT DE LA CORRECTION ---
+    # On filtre les biens pour ne garder que ceux avec le statut 'for_sale' ou 'for_rent'.
+    # On utilise .in_() pour vérifier si le statut est dans la liste des statuts valides.
+    properties = Property.query.filter(
+        Property.status.in_(['for_sale', 'for_rent'])
+    ).all()
+    # --- FIN DE LA CORRECTION ---
     
-    # On utilise la méthode to_dict() qui est déjà complète et cohérente
     return jsonify([p.to_dict() for p in properties]), 200
 
 @agents_bp.route('/properties/<int:property_id>', methods=['GET'])
@@ -199,3 +200,4 @@ def get_property_types_for_agent():
             d['attributes'].append(ad)
         result.append(d)
     return jsonify(result)
+
