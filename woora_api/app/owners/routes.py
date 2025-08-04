@@ -6,6 +6,12 @@ from app.models import Property, PropertyImage, User, PropertyType, VisitRequest
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
 from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
+from app.utils.mega_utils import get_mega_instance
+from werkzeug.utils import secure_filename
+import os
+import uuid
+
+UPLOAD_FOLDER = '/tmp' # Définir le dossier d'upload
 
 owners_bp = Blueprint('owners', __name__, url_prefix='/owners')
 
@@ -462,3 +468,61 @@ def reject_visit_request_by_owner(request_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors du rejet de la demande de visite par le propriétaire: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+# --- AJOUT DE DEUX NOUVELLES ROUTES POUR LES PROPRIÉTAIRES ---
+
+@owners_bp.route('/property_types_with_attributes', methods=['GET'])
+@jwt_required()
+def get_property_types_for_owner():
+    # On vérifie que c'est bien un propriétaire
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    # Copie de la logique de la route admin
+    pts = PropertyType.query.filter_by(is_active=True).all()
+    result = []
+    for pt in pts:
+        d = pt.to_dict()
+        aids = [s.attribute_id for s in PropertyAttributeScope.query.filter_by(property_type_id=pt.id).all()]
+        attrs = PropertyAttribute.query.filter(PropertyAttribute.id.in_(aids)).all()
+        d['attributes'] = []
+        for a in attrs:
+            ad = a.to_dict()
+            if a.data_type == 'enum':
+                ad['options'] = [o.to_dict() for o in AttributeOption.query.filter_by(attribute_id=a.id)]
+            d['attributes'].append(ad)
+        result.append(d)
+    return jsonify(result)
+
+@owners_bp.route('/upload_image', methods=['POST'])
+@jwt_required()
+def upload_image_for_owner():
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    # Copie de la logique de la route admin
+    if 'file' not in request.files:
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nom de fichier vide'}), 400
+    filename = secure_filename(file.filename)
+    tmp_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
+    try:
+        file.save(tmp_path)
+        mega = get_mega_instance()
+        if not mega:
+            return jsonify({'error': 'Connexion stockage impossible'}), 503
+        node = mega.upload(tmp_path)
+        link = mega.get_upload_link(node)
+        return jsonify({'url': link}), 200
+    except Exception as e:
+        current_app.logger.error(f"Upload error: {e}")
+        return jsonify({'error': 'Erreur interne'}), 500
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
