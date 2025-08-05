@@ -5,6 +5,7 @@ from app.models import Property, User, VisitRequest, Referral
 from app import db # Assurez-vous que l'import de 'db' est correct
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
+from app.models import ServiceFee
 
 # Assurez-vous que le chemin vers vos utilitaires d'email est correct
 try:
