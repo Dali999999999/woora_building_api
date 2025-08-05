@@ -54,7 +54,7 @@ def initiate_visit_pass_payment():
     if resp.status_code != 201:
         return jsonify({
             'error': 'Erreur FedaPay',
-            'details': resp.json(),
+            'details': resp.text or resp.reason,
             'status_code': resp.status_code
         }), 500
     fp_data = resp.json()
@@ -134,6 +134,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
