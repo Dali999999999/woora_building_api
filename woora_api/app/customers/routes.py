@@ -56,7 +56,7 @@ def initiate_visit_pass_payment():
         'transaction_id': txn.id,
         'quantity': quantity,
         'amount': float(total_amount),
-        'checkout_url': 'https://sandbox.fedapay.com/checkout/YOUR_TRANSACTION_ID'
+        'checkout_url': fp_data['hosted_url']
     }), 201
 
 
@@ -145,3 +145,4 @@ def get_property_details_for_customer(property_id):
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
 
     return jsonify(property.to_dict()), 200
+
