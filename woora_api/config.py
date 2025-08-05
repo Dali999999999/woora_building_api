@@ -17,3 +17,6 @@ class Config:
     # Configuration Mega.nz
     MEGA_EMAIL = os.environ.get('MEGA_EMAIL') or 'dev03112005@gmail.com'
     MEGA_PASSWORD = os.environ.get('MEGA_PASSWORD') or 'CXW404notfound'
+    #Paiement
+    FEDAPAY_SECRET_KEY = os.environ.get('FEDAPAY_SECRET_KEY')
+    FEDAPAY_PUBLIC_KEY = os.environ.get('FEDAPAY_PUBLIC_KEY')
