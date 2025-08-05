@@ -72,4 +72,7 @@ def create_app():
     from app.seekers.routes import seekers_bp
     app.register_blueprint(seekers_bp)
 
+    from app.customers.routes import customers_bp
+    app.register_blueprint(customers_bp)
+
     return app
