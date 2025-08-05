@@ -47,7 +47,7 @@ def initiate_visit_pass_payment():
     }
 
     resp = requests.post(
-        "https://api-sandbox.fedapay.com/v1/transactions",
+        "https://sandbox-api.fedapay.com/v1/transactions",
         json=payload,
         headers=headers
     )
@@ -131,3 +131,4 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
