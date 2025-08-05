@@ -186,3 +186,79 @@ def get_customer_visit_requests():
         }
         result.append(req_dict)
     return jsonify(result), 200
+
+# --- NOUVEL ENDPOINT POUR OBTENIR LE PRIX D'UN PASS ---
+@seekers_bp.route('/visit-pass-price', methods=['GET'])
+@jwt_required()
+def get_visit_pass_price():
+    """
+    Retourne le prix unitaire d'un pass de visite.
+    """
+    # On cherche le service correspondant dans la base de données
+    price_entry = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+    
+    if not price_entry:
+        return jsonify({'message': "Le prix des pass de visite n'est pas configuré."}), 404
+        
+    return jsonify({'price': float(price_entry.amount)}), 200
+
+# --- ENDPOINT DE VÉRIFICATION ENTIÈREMENT CORRIGÉ ---
+@seekers_bp.route('/purchase-visit-passes', methods=['POST'])
+@jwt_required()
+def purchase_visit_passes():
+    """
+    Vérifie une transaction Fedapay et crédite le compte de l'utilisateur.
+    Valide le montant payé en fonction de la quantité.
+    """
+    current_user_id = get_jwt_identity()
+    customer = User.query.get(current_user_id)
+    if not customer:
+        return jsonify({'message': "Utilisateur non trouvé."}), 404
+
+    data = request.get_json()
+    transaction_id = data.get('transaction_id')
+    quantity = data.get('quantity')
+
+    if not transaction_id or not quantity:
+        return jsonify({'message': "ID de transaction et quantité manquants."}), 400
+        
+    try:
+        quantity = int(quantity)
+        if quantity <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({'message': "La quantité doit être un nombre entier positif."}), 400
+
+    try:
+        # 1. Récupérer le prix unitaire depuis la base de données (source de vérité)
+        price_entry = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+        if not price_entry:
+            return jsonify({'message': "Service d'achat de pass non configuré."}), 500
+        
+        price_per_pass = price_entry.amount # C'est un Decimal
+        
+        # 2. Vérifier la transaction auprès de Fedapay
+        transaction = feda.Transaction.retrieve(transaction_id)
+        
+        if transaction.status != 'approved':
+            return jsonify({'message': "Le paiement n'a pas été approuvé."}), 400
+
+        # 3. Étape de sécurité CRUCIALE : Valider le montant
+        expected_amount = int(price_per_pass * quantity) # FedaPay utilise des entiers (centimes/plus petite unité)
+        
+        if transaction.amount != expected_amount:
+            current_app.logger.warning(f"Alerte de sécurité: Montant invalide pour user {customer.id}. Attendu: {expected_amount}, Reçu: {transaction.amount}")
+            return jsonify({'message': "Montant de la transaction invalide."}), 400
+
+        # 4. Créditer le compte de l'utilisateur
+        customer.visit_passes += quantity
+        db.session.commit()
+        
+        return jsonify({
+            'message': f"{quantity} pass de visite ajoutés avec succès.",
+            'new_visit_passes_balance': customer.visit_passes
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la vérification de la transaction Fedapay: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur lors de la vérification du paiement."}), 500
