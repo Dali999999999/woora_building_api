@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify, current_app
-from app.models import Property, User, Referral, Commission # On ajoute Commission ici
+from app.models import Property, User, Referral, Commission, PropertyType, PropertyAttributeScope, PropertyAttribute, AttributeOption
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.utils.helpers import generate_unique_referral_code 
-from app.models import Property, User, Referral, Commission
 from app import db
 
 # On crée un nouveau "blueprint" spécifiquement pour les agents
@@ -201,5 +200,6 @@ def get_property_types_for_agent():
             d['attributes'].append(ad)
         result.append(d)
     return jsonify(result)
+
 
 
