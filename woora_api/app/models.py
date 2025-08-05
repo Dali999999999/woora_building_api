@@ -260,7 +260,7 @@ class Transaction(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     type = db.Column(db.Enum('deposit', 'withdrawal', 'payment', 'commission_payout'), nullable=False)
     description = db.Column(db.String(255))
-    related_entity_id = db.Column(db.Integer)
+   related_entity_id = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='transactions')
     service_fee = db.relationship('ServiceFee', backref='transactions')
