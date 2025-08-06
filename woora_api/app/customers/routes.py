@@ -519,9 +519,200 @@ def get_property_details_for_customer(property_id):
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
 
+# ---------- NOUVELLE ROUTE : VÉRIFICATION AUTOMATIQUE APRÈS PAIEMENT ----------
+@customers_bp.route('/payment/verify_and_process/<transaction_id>', methods=['POST'])
+@jwt_required()
+def verify_and_process_payment(transaction_id):
+    """
+    Vérifier le statut d'une transaction FedaPay et traiter automatiquement si approuvée
+    À appeler par le client après redirection du paiement
+    """
+    user_id = get_jwt_identity()
+    user = User.query.get_or_404(user_id)
+    
+    if user.role != 'customer':
+        return jsonify({'error': 'Accès refusé : rôle customer requis.'}), 403
+    
+    print(f"🔍 Vérification paiement - Transaction: {transaction_id}, User: {user_id}")
+    
+    # 1. Vérifier que la transaction locale existe et appartient à l'utilisateur
+    local_txn = Transaction.query.filter_by(
+        related_entity_id=str(transaction_id),
+        user_id=user_id
+    ).first()
+    
+    if not local_txn:
+        print(f"❌ Transaction locale {transaction_id} non trouvée pour user {user_id}")
+        return jsonify({'error': 'Transaction non trouvée ou accès refusé'}), 404
+    
+    # 2. Vérifier si déjà traitée
+    if 'validé' in local_txn.description:
+        print(f"⚠️  Transaction {transaction_id} déjà traitée")
+        return jsonify({
+            'message': 'Transaction déjà traitée',
+            'status': 'already_processed',
+            'current_passes': user.visit_passes
+        }), 200
+    
+    # 3. Interroger FedaPay pour connaître le statut réel
+    headers = {
+        'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}',
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        print(f"🔍 Interrogation FedaPay pour transaction {transaction_id}")
+        
+        resp = requests.get(
+            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}",
+            headers=headers,
+            timeout=30
+        )
+        
+        if resp.status_code != 200:
+            print(f"❌ Erreur FedaPay: {resp.status_code} - {resp.text}")
+            return jsonify({
+                'error': 'Impossible de vérifier le statut du paiement',
+                'fedapay_error': resp.status_code
+            }), 500
+        
+        fedapay_data = resp.json()
+        transaction_data = fedapay_data.get('v1/transaction', fedapay_data)
+        status = transaction_data.get('status', '').lower()
+        amount = transaction_data.get('amount', 0)
+        
+        print(f"🔍 Statut FedaPay: {status}, Montant: {amount}")
+        
+        # 4. Traitement selon le statut
+        if status == 'approved':
+            print(f"✅ Paiement approuvé - Traitement automatique")
+            
+            # Récupérer le prix unitaire
+            fee = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+            if not fee:
+                print("❌ ServiceFee 'visit_pass_purchase' non trouvé")
+                return jsonify({'error': 'Configuration tarifaire manquante'}), 500
+            
+            # Calculer et ajouter les passes
+            old_passes = user.visit_passes
+            quantity = int(local_txn.amount / fee.amount)
+            user.visit_passes += quantity
+            local_txn.description = f'Achat de {quantity} passe(s) validé automatiquement'
+            
+            # Sauvegarder
+            db.session.commit()
+            
+            print(f"✅ Succès: +{quantity} passes ajoutés à l'utilisateur {user_id}")
+            print(f"✅ Passes: {old_passes} → {user.visit_passes}")
+            
+            return jsonify({
+                'message': 'Paiement traité avec succès !',
+                'status': 'success',
+                'transaction_id': transaction_id,
+                'passes_added': quantity,
+                'total_passes': user.visit_passes,
+                'amount_paid': float(local_txn.amount)
+            }), 200
+            
+        elif status == 'pending':
+            print(f"⏳ Paiement en attente")
+            return jsonify({
+                'message': 'Paiement en cours de traitement',
+                'status': 'pending',
+                'transaction_id': transaction_id
+            }), 200
+            
+        elif status in ['declined', 'canceled', 'failed']:
+            print(f"❌ Paiement {status}")
+            
+            # Mettre à jour la description locale
+            local_txn.description = f'Paiement {status}'
+            db.session.commit()
+            
+            return jsonify({
+                'message': f'Paiement {status}',
+                'status': 'failed',
+                'payment_status': status,
+                'transaction_id': transaction_id
+            }), 200
+            
+        else:
+            print(f"⚠️  Statut non reconnu: {status}")
+            return jsonify({
+                'message': 'Statut de paiement non reconnu',
+                'status': 'unknown',
+                'payment_status': status,
+                'transaction_id': transaction_id
+            }), 200
+    
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Erreur de connexion FedaPay: {e}")
+        return jsonify({
+            'error': 'Erreur de connexion au service de paiement',
+            'details': str(e)
+        }), 500
+        
+    except Exception as e:
+        print(f"❌ Erreur interne: {e}")
+        db.session.rollback()
+        return jsonify({
+            'error': 'Erreur interne',
+            'details': str(e)
+        }), 500
 
 
-
-
-
-
+# ---------- ROUTE POUR VÉRIFIER LE STATUT SANS TRAITEMENT ----------
+@customers_bp.route('/payment/check_status/<transaction_id>', methods=['GET'])
+@jwt_required()
+def check_payment_status_only(transaction_id):
+    """
+    Vérifier uniquement le statut sans traitement automatique
+    Utile pour afficher le statut à l'utilisateur
+    """
+    user_id = get_jwt_identity()
+    
+    # Vérifier que la transaction appartient à l'utilisateur
+    local_txn = Transaction.query.filter_by(
+        related_entity_id=str(transaction_id),
+        user_id=user_id
+    ).first()
+    
+    if not local_txn:
+        return jsonify({'error': 'Transaction non trouvée'}), 404
+    
+    headers = {
+        'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}',
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        resp = requests.get(
+            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}",
+            headers=headers,
+            timeout=30
+        )
+        
+        if resp.status_code == 200:
+            fedapay_data = resp.json()
+            transaction_data = fedapay_data.get('v1/transaction', fedapay_data)
+            
+            return jsonify({
+                'transaction_id': transaction_id,
+                'fedapay_status': transaction_data.get('status'),
+                'amount': transaction_data.get('amount'),
+                'local_description': local_txn.description,
+                'created_at': transaction_data.get('created_at'),
+                'is_processed': 'validé' in local_txn.description
+            }), 200
+        else:
+            return jsonify({
+                'error': 'Impossible de récupérer le statut',
+                'local_description': local_txn.description
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'error': 'Erreur lors de la vérification',
+            'local_description': local_txn.description,
+            'details': str(e)
+        }), 500
