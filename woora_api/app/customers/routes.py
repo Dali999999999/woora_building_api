@@ -148,26 +148,60 @@ def initiate_visit_pass_payment():
 # ---------- 2. WEBHOOK ----------
 @customers_bp.route('/payment/webhook/fedapay', methods=['POST', 'GET'])
 def fedapay_webhook():
-    ...
-    if data.get('status') == 'approved':
-        transaction_id = str(data.get('id') or data.get('reference'))
-        txn = Transaction.query.filter_by(related_entity_id=transaction_id).first()
-        if not txn:
-            print(f"❌ Transaction {transaction_id} introuvable")
-            return jsonify({'status': 'unknown_transaction'}), 404
+    if request.method == 'GET':
+        return jsonify({'status': 'ok'}), 200
 
-        user = User.query.get(txn.user_id)
-        fee  = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
-        if not user or not fee:
-            print(f"❌ User/fee missing for transaction {transaction_id}")
-            return jsonify({'status': 'internal_error'}), 500
+    try:
+        payload = request.get_data()
+        provided_sig = request.headers.get('X-FEDAPAY-SIGNATURE')
 
-        quantity = int(txn.amount / fee.amount)
-        user.visit_passes += quantity
-        txn.description = f'Achat de {quantity} passe(s) validé'
-        db.session.commit()
-        print(f"✅ +{quantity} passes ajoutés à l’utilisateur {user.id}")
-    ...
+        secret = os.getenv("FEDAPAY_WEBHOOK_SECRET")
+        if not secret or not provided_sig:
+            print("❌ Signature manquante dans les headers")
+            return jsonify({'status': 'missing_sig'}), 401
+
+        expected_sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+
+        try:
+            sig_part = provided_sig.split('s=')[1]
+        except IndexError:
+            print("❌ Format de signature invalide")
+            return jsonify({'status': 'invalid_sig_format'}), 401
+
+        if not hmac.compare_digest(sig_part, expected_sig):
+            print("❌ Signature incorrecte")
+            return jsonify({'status': 'bad_signature'}), 401
+
+        data = request.get_json()
+        print(f"🔍 Webhook reçu: {data}")
+
+        if data.get('status') == 'approved':
+            transaction_id = str(data.get('id') or data.get('reference'))
+            print(f"🔍 Traitement de la transaction {transaction_id}")
+
+            txn = Transaction.query.filter_by(related_entity_id=transaction_id).first()
+            if not txn:
+                print(f"❌ Transaction {transaction_id} introuvable")
+                return jsonify({'status': 'unknown_transaction'}), 404
+
+            user = User.query.get(txn.user_id)
+            fee = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+            if not user or not fee:
+                print(f"❌ User/fee missing for transaction {transaction_id}")
+                return jsonify({'status': 'internal_error'}), 500
+
+            quantity = int(txn.amount / fee.amount)
+            user.visit_passes += quantity
+            txn.description = f'Achat de {quantity} passe(s) validé'
+            db.session.commit()
+            print(f"✅ +{quantity} passes ajoutés à l’utilisateur {user.id}")
+
+        return jsonify({'status': 'ok'}), 200
+
+    except Exception as e:
+        print(f"❌ Erreur webhook: {str(e)}")
+        return jsonify({'status': 'error', 'details': str(e)}), 500
+
 
 @customers_bp.route('/payment/cancel', methods=['GET'])
 def payment_cancelled():
@@ -196,6 +230,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
