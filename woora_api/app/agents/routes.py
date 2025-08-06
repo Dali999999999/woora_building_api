@@ -207,7 +207,7 @@ def get_property_types_for_agent():
 # 2. ROUTES FLASK POUR LES VERSEMENTS
 # ===============================================
 
-@app.route('/agents/commissions/summary', methods=['GET'])
+@agents_bp.route('/commissions/summary', methods=['GET'])
 @jwt_required()
 def get_commission_summary():
     """Récupérer le résumé des commissions de l'agent"""
