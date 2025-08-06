@@ -27,7 +27,7 @@ def initiate_visit_pass_payment():
     if not fee:
         return jsonify({'error': 'Prix du pass non défini.'}), 500
 
-    total_amount = int(fee.amount * quantity * 100)
+    total_amount = int(fee.amount * quantity)
     headers = {
         'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}',
         'Content-Type': 'application/json'
@@ -216,4 +216,5 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
