@@ -40,10 +40,6 @@ def initiate_visit_pass_payment():
             "firstname": user.first_name,
             "lastname": user.last_name,
             "email": user.email,
-            "phone_number": {
-                "number": user.phone_number,
-                "country": "BJ"
-            }
         },
         "callback_url": os.getenv("FEDAPAY_CALLBACK_URL", "https://woora-building-api.onrender.com/customers/payment/webhook/fedapay"),
         "cancel_url": os.getenv("FEDAPAY_CANCEL_URL", "https://woora-building-api.onrender.com/customers/payment/cancel")
@@ -220,3 +216,4 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
