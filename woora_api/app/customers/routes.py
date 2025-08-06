@@ -145,7 +145,93 @@ def initiate_visit_pass_payment():
 
 
 
-# ---------- 2. WEBHOOK AMÉLIORÉ ----------
+# ---------- 2. SOLUTION DE POLLING (en attendant le webhook) ----------
+@customers_bp.route('/payment/verify_transaction/<transaction_id>', methods=['GET'])
+@jwt_required()
+def verify_transaction_status(transaction_id):
+    """Vérifier manuellement le statut d'une transaction FedaPay"""
+    user_id = get_jwt_identity()
+    
+    headers = {
+        'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}',
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        print(f"🔍 Vérification manuelle transaction {transaction_id}")
+        
+        resp = requests.get(
+            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}",
+            headers=headers,
+            timeout=30
+        )
+        
+        if resp.status_code != 200:
+            return jsonify({
+                'error': 'Transaction non trouvée sur FedaPay',
+                'status': resp.status_code
+            }), 404
+            
+        fedapay_data = resp.json()
+        transaction_data = fedapay_data.get('v1/transaction', fedapay_data)
+        status = transaction_data.get('status', '').lower()
+        
+        print(f"🔍 Statut FedaPay: {status}")
+        
+        # Vérifier la transaction locale
+        txn = Transaction.query.filter_by(related_entity_id=str(transaction_id)).first()
+        if not txn:
+            return jsonify({
+                'error': 'Transaction locale non trouvée',
+                'fedapay_status': status
+            }), 404
+            
+        # Vérifier si l'utilisateur a le droit de voir cette transaction
+        if txn.user_id != user_id:
+            return jsonify({'error': 'Accès refusé'}), 403
+            
+        # Si approved et pas encore traité
+        if status == 'approved' and 'En attente' in txn.description:
+            print(f"✅ Transaction {transaction_id} approuvée - traitement automatique")
+            
+            user = User.query.get(txn.user_id)
+            fee = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+            
+            if user and fee:
+                old_passes = user.visit_passes
+                quantity = int(txn.amount / fee.amount)
+                user.visit_passes += quantity
+                txn.description = f'Achat de {quantity} passe(s) validé (vérification manuelle)'
+                
+                db.session.commit()
+                print(f"✅ +{quantity} passes ajoutés via vérification manuelle")
+                
+                return jsonify({
+                    'message': 'Transaction traitée avec succès',
+                    'status': 'approved',
+                    'passes_added': quantity,
+                    'total_passes': user.visit_passes
+                }), 200
+                
+        return jsonify({
+            'fedapay_status': status,
+            'local_description': txn.description,
+            'amount': float(txn.amount),
+            'processed': 'validé' in txn.description
+        }), 200
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            'error': 'Erreur de connexion à FedaPay',
+            'details': str(e)
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'error': 'Erreur interne',
+            'details': str(e)
+        }), 500
+
+# ---------- 3. WEBHOOK AMÉLIORÉ ----------
 @customers_bp.route('/payment/webhook/fedapay', methods=['POST', 'GET'])
 def fedapay_webhook():
     import datetime
@@ -432,6 +518,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
