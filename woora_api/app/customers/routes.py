@@ -92,14 +92,18 @@ def initiate_visit_pass_payment():
             transaction_data = fp_data['v1/transaction']
             transaction_id = transaction_data.get('id') or transaction_data.get('reference')
             # Chercher l'URL de checkout dans différents endroits possibles
-            checkout_url = (transaction_data.get('hosted_url') or 
+            checkout_url = (transaction_data.get('payment_url') or
+                          transaction_data.get('hosted_url') or 
                           transaction_data.get('checkout_url') or 
+                          fp_data.get('payment_url') or
                           fp_data.get('hosted_url') or
                           fp_data.get('checkout_url'))
         else:
             # Structure directe
             transaction_id = fp_data.get('id') or fp_data.get('reference')
-            checkout_url = fp_data.get('hosted_url') or fp_data.get('checkout_url')
+            checkout_url = (fp_data.get('payment_url') or
+                          fp_data.get('hosted_url') or 
+                          fp_data.get('checkout_url'))
         
         if not transaction_id:
             return jsonify({
