@@ -264,3 +264,52 @@ class Transaction(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='transactions')
     service_fee = db.relationship('ServiceFee', backref='transactions')
+
+class PayoutRequest(db.Model):
+    __tablename__ = 'PayoutRequests'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
+    requested_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    actual_amount = db.Column(db.Numeric(10, 2), nullable=True)  # Montant réellement versé (après frais)
+    fedapay_transaction_id = db.Column(db.String(100), nullable=True)
+    
+    # Statuts possibles
+    status = db.Column(
+        db.Enum('pending', 'processing', 'completed', 'failed', 'cancelled'), 
+        nullable=False, 
+        default='pending'
+    )
+    
+    # Informations de paiement
+    payment_method = db.Column(db.String(50), nullable=True)  # 'mobile_money', etc.
+    phone_number = db.Column(db.String(20), nullable=True)   # Pour Mobile Money
+    
+    # Messages et erreurs
+    admin_notes = db.Column(db.Text, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    
+    # Timestamps
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relations
+    agent = db.relationship('User', backref='payout_requests')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'requested_amount': float(self.requested_amount) if self.requested_amount else 0,
+            'actual_amount': float(self.actual_amount) if self.actual_amount else None,
+            'fedapay_transaction_id': self.fedapay_transaction_id,
+            'status': self.status,
+            'payment_method': self.payment_method,
+            'phone_number': self.phone_number,
+            'admin_notes': self.admin_notes,
+            'error_message': self.error_message,
+            'requested_at': self.requested_at.isoformat() if self.requested_at else None,
+            'processed_at': self.processed_at.isoformat() if self.processed_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+        }
