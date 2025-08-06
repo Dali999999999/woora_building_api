@@ -145,62 +145,264 @@ def initiate_visit_pass_payment():
 
 
 
-# ---------- 2. WEBHOOK ----------
+# ---------- 2. WEBHOOK AMÉLIORÉ ----------
 @customers_bp.route('/payment/webhook/fedapay', methods=['POST', 'GET'])
 def fedapay_webhook():
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    
+    # ========== LOGS DE SURVEILLANCE COMPLETS ==========
+    print(f"🔥 [{timestamp}] ======= WEBHOOK FEDAPAY APPELÉ =======")
+    print(f"🔥 Méthode: {request.method}")
+    print(f"🔥 IP source: {request.remote_addr}")
+    print(f"🔥 User-Agent: {request.headers.get('User-Agent', 'Non défini')}")
+    print(f"🔥 URL complète: {request.url}")
+    print(f"🔥 Content-Type: {request.headers.get('Content-Type', 'Non défini')}")
+    print(f"🔥 Content-Length: {request.headers.get('Content-Length', 'Non défini')}")
+    
+    # Log de tous les headers importants
+    important_headers = ['X-FEDAPAY-SIGNATURE', 'Authorization', 'X-Forwarded-For', 
+                        'X-Real-IP', 'Host', 'Origin', 'Referer']
+    for header in important_headers:
+        value = request.headers.get(header)
+        if value:
+            print(f"🔥 {header}: {value}")
+    
+    # ========== GESTION DES REQUÊTES GET (TEST DE CONNECTIVITÉ) ==========
     if request.method == 'GET':
-        return jsonify({'status': 'ok'}), 200
+        print("✅ GET request sur webhook - Endpoint accessible")
+        print(f"✅ URL configurée: {os.getenv('FEDAPAY_CALLBACK_URL', 'Non configurée')}")
+        print(f"✅ Secret webhook configuré: {'Oui' if os.getenv('FEDAPAY_WEBHOOK_SECRET') else 'Non'}")
+        return jsonify({
+            'status': 'webhook_accessible',
+            'timestamp': timestamp,
+            'message': 'Endpoint webhook FedaPay fonctionnel'
+        }), 200
 
+    # ========== TRAITEMENT DES WEBHOOKS POST ==========
     try:
+        # Récupération et log du payload
         payload = request.get_data()
-        provided_sig = request.headers.get('X-FEDAPAY-SIGNATURE')
-
-        secret = os.getenv("FEDAPAY_WEBHOOK_SECRET")
-        if not secret or not provided_sig:
-            print("❌ Signature manquante dans les headers")
-            return jsonify({'status': 'missing_sig'}), 401
-
-        expected_sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-
+        print(f"🔥 Taille du payload: {len(payload)} bytes")
+        print(f"🔥 Payload brut: {payload}")
+        
+        if not payload:
+            print("❌ Payload vide reçu")
+            return jsonify({'status': 'empty_payload', 'timestamp': timestamp}), 400
+        
+        # Tentative de décodage du payload
         try:
-            sig_part = provided_sig.split('s=')[1]
-        except IndexError:
-            print("❌ Format de signature invalide")
-            return jsonify({'status': 'invalid_sig_format'}), 401
+            payload_str = payload.decode('utf-8')
+            print(f"🔥 Payload décodé: {payload_str}")
+        except UnicodeDecodeError as e:
+            print(f"❌ Erreur décodage payload: {e}")
+            return jsonify({'status': 'decode_error', 'timestamp': timestamp}), 400
 
-        if not hmac.compare_digest(sig_part, expected_sig):
-            print("❌ Signature incorrecte")
-            return jsonify({'status': 'bad_signature'}), 401
+        # ========== VÉRIFICATION DE LA SIGNATURE ==========
+        provided_sig = request.headers.get('X-FEDAPAY-SIGNATURE')
+        secret = os.getenv("FEDAPAY_WEBHOOK_SECRET")
+        
+        print(f"🔐 Signature fournie: {provided_sig}")
+        print(f"🔐 Secret configuré: {'Oui (' + str(len(secret)) + ' chars)' if secret else 'Non'}")
+        
+        if not secret:
+            print("⚠️  ATTENTION: Pas de secret webhook configuré - traitement sans vérification")
+        elif not provided_sig:
+            print("❌ Signature manquante dans les headers")
+            print("❌ Headers reçus:", dict(request.headers))
+            return jsonify({'status': 'missing_signature', 'timestamp': timestamp}), 401
+        else:
+            # Vérification de la signature
+            expected_sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+            print(f"🔐 Signature attendue: {expected_sig}")
+            
+            try:
+                # FedaPay peut envoyer la signature avec un préfixe
+                if provided_sig.startswith('sha256='):
+                    sig_part = provided_sig.replace('sha256=', '')
+                elif '=' in provided_sig:
+                    sig_part = provided_sig.split('=')[1]
+                else:
+                    sig_part = provided_sig
+                    
+                print(f"🔐 Signature extraite: {sig_part}")
+                
+                if not hmac.compare_digest(sig_part, expected_sig):
+                    print("❌ Signature incorrecte")
+                    print(f"❌ Attendu: {expected_sig}")
+                    print(f"❌ Reçu: {sig_part}")
+                    return jsonify({'status': 'invalid_signature', 'timestamp': timestamp}), 401
+                else:
+                    print("✅ Signature valide")
+                    
+            except (IndexError, ValueError) as e:
+                print(f"❌ Format de signature invalide: {e}")
+                return jsonify({'status': 'invalid_signature_format', 'timestamp': timestamp}), 401
 
-        data = request.get_json()
-        print(f"🔍 Webhook reçu: {data}")
+        # ========== PARSING DES DONNÉES JSON ==========
+        try:
+            data = request.get_json()
+            if not data:
+                print("❌ Impossible de parser le JSON ou JSON vide")
+                return jsonify({'status': 'invalid_json', 'timestamp': timestamp}), 400
+                
+            print(f"🔍 Données JSON reçues: {data}")
+            
+        except Exception as e:
+            print(f"❌ Erreur parsing JSON: {e}")
+            return jsonify({'status': 'json_error', 'details': str(e), 'timestamp': timestamp}), 400
 
-        if data.get('status') == 'approved':
-            transaction_id = str(data.get('id') or data.get('reference'))
-            print(f"🔍 Traitement de la transaction {transaction_id}")
+        # ========== EXTRACTION DES INFORMATIONS TRANSACTION ==========
+        # FedaPay peut envoyer différents formats
+        transaction_data = data
+        if 'v1/transaction' in data:
+            transaction_data = data['v1/transaction']
+            print("🔍 Structure imbriquée détectée")
+        
+        transaction_id = (transaction_data.get('id') or 
+                         transaction_data.get('reference') or
+                         str(data.get('id', '')))
+        
+        status = transaction_data.get('status', '').lower()
+        amount = transaction_data.get('amount')
+        
+        print(f"🔍 ID Transaction: {transaction_id}")
+        print(f"🔍 Statut: {status}")
+        print(f"🔍 Montant: {amount}")
+        
+        if not transaction_id:
+            print("❌ ID de transaction manquant")
+            return jsonify({
+                'status': 'missing_transaction_id', 
+                'received_data': data,
+                'timestamp': timestamp
+            }), 400
 
-            txn = Transaction.query.filter_by(related_entity_id=transaction_id).first()
+        # ========== TRAITEMENT SELON LE STATUT ==========
+        if status == 'approved':
+            print(f"✅ Transaction approuvée: {transaction_id}")
+            
+            # Recherche de la transaction locale
+            txn = Transaction.query.filter_by(related_entity_id=str(transaction_id)).first()
             if not txn:
-                print(f"❌ Transaction {transaction_id} introuvable")
-                return jsonify({'status': 'unknown_transaction'}), 404
+                print(f"❌ Transaction locale {transaction_id} introuvable")
+                
+                # Log de toutes les transactions en attente pour debug
+                pending_txns = Transaction.query.filter_by(description='En attente de validation').all()
+                print(f"🔍 Transactions en attente: {[t.related_entity_id for t in pending_txns]}")
+                
+                return jsonify({
+                    'status': 'transaction_not_found',
+                    'transaction_id': transaction_id,
+                    'timestamp': timestamp
+                }), 404
 
+            print(f"✅ Transaction locale trouvée: User {txn.user_id}, Montant {txn.amount}")
+            
+            # Vérification que la transaction n'est pas déjà traitée
+            if 'validé' in txn.description:
+                print(f"⚠️  Transaction {transaction_id} déjà traitée")
+                return jsonify({
+                    'status': 'already_processed',
+                    'transaction_id': transaction_id,
+                    'timestamp': timestamp
+                }), 200
+
+            # Récupération des données nécessaires
             user = User.query.get(txn.user_id)
             fee = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
-            if not user or not fee:
-                print(f"❌ User/fee missing for transaction {transaction_id}")
-                return jsonify({'status': 'internal_error'}), 500
+            
+            if not user:
+                print(f"❌ Utilisateur {txn.user_id} introuvable")
+                return jsonify({
+                    'status': 'user_not_found',
+                    'user_id': txn.user_id,
+                    'timestamp': timestamp
+                }), 500
+            
+            if not fee:
+                print("❌ ServiceFee 'visit_pass_purchase' introuvable")
+                return jsonify({
+                    'status': 'service_fee_not_found',
+                    'timestamp': timestamp
+                }), 500
 
+            # Calcul et ajout des passes
+            old_passes = user.visit_passes
             quantity = int(txn.amount / fee.amount)
             user.visit_passes += quantity
             txn.description = f'Achat de {quantity} passe(s) validé'
-            db.session.commit()
-            print(f"✅ +{quantity} passes ajoutés à l’utilisateur {user.id}")
+            
+            try:
+                db.session.commit()
+                print(f"✅ Succès: +{quantity} passes ajoutés à l'utilisateur {user.id}")
+                print(f"✅ Passes: {old_passes} -> {user.visit_passes}")
+                print(f"✅ Transaction mise à jour: {txn.description}")
+                
+                return jsonify({
+                    'status': 'success',
+                    'transaction_id': transaction_id,
+                    'user_id': user.id,
+                    'passes_added': quantity,
+                    'total_passes': user.visit_passes,
+                    'timestamp': timestamp
+                }), 200
+                
+            except Exception as e:
+                db.session.rollback()
+                print(f"❌ Erreur lors de la sauvegarde: {e}")
+                return jsonify({
+                    'status': 'database_error',
+                    'error': str(e),
+                    'timestamp': timestamp
+                }), 500
+                
+        elif status in ['declined', 'canceled', 'failed']:
+            print(f"❌ Transaction {status}: {transaction_id}")
+            
+            # Optionnel: mettre à jour la transaction locale
+            txn = Transaction.query.filter_by(related_entity_id=str(transaction_id)).first()
+            if txn and 'En attente' in txn.description:
+                txn.description = f'Paiement {status}'
+                try:
+                    db.session.commit()
+                    print(f"✅ Transaction {transaction_id} marquée comme {status}")
+                except Exception as e:
+                    print(f"⚠️  Erreur mise à jour transaction {status}: {e}")
+            
+            return jsonify({
+                'status': 'payment_failed',
+                'payment_status': status,
+                'transaction_id': transaction_id,
+                'timestamp': timestamp
+            }), 200
+            
+        else:
+            print(f"⚠️  Statut non géré: {status}")
+            return jsonify({
+                'status': 'unhandled_status',
+                'payment_status': status,
+                'transaction_id': transaction_id,
+                'timestamp': timestamp
+            }), 200
 
-        return jsonify({'status': 'ok'}), 200
+        return jsonify({
+            'status': 'processed',
+            'timestamp': timestamp
+        }), 200
 
     except Exception as e:
-        print(f"❌ Erreur webhook: {str(e)}")
-        return jsonify({'status': 'error', 'details': str(e)}), 500
+        print(f"❌ Erreur critique webhook: {str(e)}")
+        print(f"❌ Type d'erreur: {type(e).__name__}")
+        import traceback
+        print(f"❌ Traceback complet: {traceback.format_exc()}")
+        
+        return jsonify({
+            'status': 'internal_error',
+            'error': str(e),
+            'error_type': type(e).__name__,
+            'timestamp': timestamp
+        }), 500
 
 
 @customers_bp.route('/payment/cancel', methods=['GET'])
@@ -230,6 +432,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
