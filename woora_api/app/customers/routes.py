@@ -84,7 +84,7 @@ def initiate_visit_pass_payment():
 @customers_bp.route('/payment/webhook/fedapay', methods=['POST'])
 def fedapay_webhook():
     payload = request.get_data()
-    provided_sig = request.headers.get('X-Fedapay-Signature')
+    provided_sig = request.headers.get('X-FEDAPAY-SIGNATURE')
 
     secret = os.getenv("FEDAPAY_WEBHOOK_SECRET")
     if not secret or not provided_sig:
@@ -134,6 +134,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
