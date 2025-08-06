@@ -27,7 +27,7 @@ def initiate_visit_pass_payment():
     if not fee:
         return jsonify({'error': 'Prix du pass non défini.'}), 500
 
-    total_amount = int(fee.amount * 100)  # centimes
+    total_amount = int(fee.amount * quantity * 100)
     headers = {
         'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}',
         'Content-Type': 'application/json'
