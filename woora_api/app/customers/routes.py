@@ -84,38 +84,35 @@ def initiate_visit_pass_payment():
 @customers_bp.route('/payment/webhook/fedapay', methods=['POST'])
 def fedapay_webhook():
     payload = request.get_data()
-    sig_header = request.headers.get('FedaPay-Signature')
-    secret = os.getenv("FEDAPAY_WEBHOOK_SECRET")
+    provided_sig = request.headers.get('X-Fedapay-Signature')
 
-    if not sig_header or not hmac.compare_digest(
-        hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest(),
-        sig_header
-    ):
+    secret = os.getenv("FEDAPAY_WEBHOOK_SECRET")
+    if not secret or not provided_sig:
+        return jsonify({'status': 'missing_sig'}), 401
+
+    # Calculer la signature attendue
+    expected_sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+
+    # Extraire la signature depuis l'en-tête (format : t=...,s=...)
+    try:
+        sig_part = provided_sig.split('s=')[1]
+    except IndexError:
+        return jsonify({'status': 'invalid_sig_format'}), 401
+
+    if not hmac.compare_digest(sig_part, expected_sig):
         return jsonify({'status': 'bad_signature'}), 401
 
+    # Traiter l'événement
     data = request.get_json()
-    status = data.get('status')
-    fp_id = data.get('id')
-
-    if status != 'approved':
-        return jsonify({'status': 'ignored'}), 200
-
-    txn = Transaction.query.filter_by(related_entity_id=fp_id).first()
-    if not txn:
-        return jsonify({'status': 'not_found'}), 200
-
-    user = User.query.get(txn.user_id)
-    if not user or user.role != 'customer':
-        return jsonify({'status': 'invalid_user'}), 200
-
-    fee = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
-    if not fee or fee.amount <= 0:
-        return jsonify({'status': 'invalid_price'}), 200
-
-    quantity = int(txn.amount / fee.amount)
-    user.visit_passes += quantity
-    txn.description = f'Achat de {quantity} passe(s) validé'
-    db.session.commit()
+    if data.get('status') == 'approved':
+        txn = Transaction.query.filter_by(related_entity_id=data.get('id')).first()
+        if txn:
+            user = User.query.get(txn.user_id)
+            fee = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
+            quantity = int(txn.amount / fee.amount)
+            user.visit_passes += quantity
+            txn.description = f'Achat de {quantity} passe(s) validé'
+            db.session.commit()
     return jsonify({'status': 'ok'}), 200
 
 # ---------- 3. Routes existantes ----------
@@ -137,6 +134,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
