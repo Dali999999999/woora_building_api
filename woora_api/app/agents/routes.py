@@ -250,7 +250,7 @@ def get_commission_summary():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/agents/commissions/request_payout', methods=['POST'])
+@agents_bp.route('/agents/commissions/request_payout', methods=['POST'])
 @jwt_required()
 def request_commission_payout():
     """Demander un versement de commissions"""
@@ -410,7 +410,7 @@ def initiate_fedapay_payout(payout_request):
 # 4. WEBHOOK POUR TRAITER LES CONFIRMATIONS FEDAPAY
 # ===============================================
 
-@app.route('/webhooks/fedapay/payout', methods=['POST'])
+@agents_bp.route('/webhooks/fedapay/payout', methods=['POST'])
 def fedapay_payout_webhook():
     """Webhook pour traiter les notifications de versement FedaPay"""
     try:
@@ -474,7 +474,7 @@ def fedapay_payout_webhook():
 # 5. ROUTE POUR L'HISTORIQUE DES VERSEMENTS
 # ===============================================
 
-@app.route('/agents/commissions/payout_history', methods=['GET'])
+@agents_bp.route('/agents/commissions/payout_history', methods=['GET'])
 @jwt_required()
 def get_payout_history():
     """Récupérer l'historique des demandes de versement"""
@@ -511,3 +511,4 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
