@@ -35,7 +35,7 @@ def initiate_visit_pass_payment():
     payload = {
     "description": f"Achat de {quantity} passe(s) de visite",
     "amount": total_amount,
-    "currency": {"iso": "XOF"},
+    "currency": "XOF",
     "customer": {
         "firstname": user.first_name,
         "lastname": user.last_name,
@@ -134,6 +134,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
