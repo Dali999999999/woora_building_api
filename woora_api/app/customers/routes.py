@@ -146,7 +146,7 @@ def initiate_visit_pass_payment():
 
 
 # ---------- 2. WEBHOOK ----------
-@customers_bp.route('/payment/webhook/fedapay', methods=['POST'])
+@customers_bp.route('/payment/webhook/fedapay', methods=['POST', 'GET'])
 def fedapay_webhook():
     ...
     if data.get('status') == 'approved':
@@ -168,6 +168,15 @@ def fedapay_webhook():
         db.session.commit()
         print(f"✅ +{quantity} passes ajoutés à l’utilisateur {user.id}")
     ...
+
+@customers_bp.route('/payment/cancel', methods=['GET'])
+def payment_cancelled():
+    """
+    Gère l'annulation du paiement par l'utilisateur.
+    """
+    return jsonify({'status': 'cancelled', 'message': 'Paiement annulé par l’utilisateur'}), 200
+
+
 # ---------- 3. Routes existantes ----------
 @customers_bp.route('/properties', methods=['GET'])
 @jwt_required()
@@ -187,6 +196,7 @@ def get_property_details_for_customer(property_id):
     from app.models import Property
     prop = Property.query.get_or_404(property_id)
     return jsonify(prop.to_dict()), 200
+
 
 
 
