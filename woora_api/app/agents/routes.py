@@ -339,41 +339,57 @@ def request_commission_payout():
 # 3. FONCTION D'INTÉGRATION FEDAPAY PAYOUT
 # ===============================================
 
-def initiate_fedapay_payout(payout_request):
+def initiate_fedapay_payout(payout_request, payment_details):
     """
-    Initier un versement via FedaPay API
+    Initier un versement via FedaPay API en utilisant la structure de payload correcte.
     Documentation: https://docs.fedapay.com/payments/payouts
     """
     try:
-        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY')  # Clé API FedaPay
-        fedapay_base_url = os.getenv('FEDAPAY_BASE_URL', 'https://sandbox-api.fedapay.com/v1')
+        # Déterminer si on est en mode sandbox ou production
+        # Idéalement, à mettre dans la configuration de l'app Flask
+        is_sandbox = os.getenv('FLASK_ENV', 'production') != 'production'
+        
+        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY_SANDBOX' if is_sandbox else 'FEDAPAY_SECRET_KEY')
+        fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
         
         if not fedapay_api_key:
-            raise Exception('Clé API FedaPay manquante')
-        
-        # Préparer les données pour FedaPay
+            raise Exception('Clé API FedaPay manquante pour l\'environnement actuel.')
+
+        # Récupérer les détails du paiement depuis le dictionnaire
+        phone_number = payment_details.get('phone_number')
+        mode = payment_details.get('mode') # ex: 'mtn_open'
+        country_iso = payment_details.get('country_iso') # ex: 'bj'
+
+        if not all([phone_number, mode, country_iso]):
+            raise Exception("Les détails de paiement (numéro, mode, pays) sont incomplets.")
+
+        # Préparer le payload pour FedaPay avec la structure exacte
         payout_data = {
-            "amount": int(float(payout_request.requested_amount)),  # Montant en centimes/kobo
-            "currency": "XOF",  # Franc CFA
-            "description": f"Versement commission agent #{payout_request.agent_id}",
+            "amount": int(float(payout_request.requested_amount)),
+            "currency": {"iso": "XOF"},  # Structure objet correcte
+            "mode": mode,
+            "description": f"Versement commission Woora agent #{payout_request.agent_id}",
             "customer": {
                 "firstname": payout_request.agent.first_name or "Agent",
                 "lastname": payout_request.agent.last_name or f"#{payout_request.agent_id}",
                 "email": payout_request.agent.email,
-                "phone_number": payout_request.phone_number
+                "phone_number": {
+                    "number": phone_number,    # Numéro au format international
+                    "country": country_iso.lower() # Code pays en minuscules
+                }
             },
-            "method": payout_request.payment_method,
-            "phone_number": payout_request.phone_number,
             "callback_url": f"{os.getenv('API_BASE_URL')}/webhooks/fedapay/payout"
         }
         
-        # Headers pour l'API FedaPay
         headers = {
             'Authorization': f'Bearer {fedapay_api_key}',
             'Content-Type': 'application/json'
         }
         
-        # Faire la requête à FedaPay
+        # Étape 1: Créer le virement (Payout)
+        # La documentation FedaPay indique que la création et l'envoi peuvent être faits en une seule étape
+        # via l'endpoint /payouts. Il n'est pas toujours nécessaire d'appeler /start séparément.
+        # Nous allons suivre le modèle de création direct.
         response = requests.post(
             f'{fedapay_base_url}/payouts',
             json=payout_data,
@@ -381,32 +397,29 @@ def initiate_fedapay_payout(payout_request):
             timeout=30
         )
         
-        if response.status_code == 201:
-            fedapay_response = response.json()
-            return {
-                'success': True,
-                'transaction_id': fedapay_response.get('id'),
-                'reference': fedapay_response.get('reference'),
-                'status': fedapay_response.get('status')
-            }
-        else:
-            error_data = response.json() if response.content else {}
-            return {
-                'success': False,
-                'error': error_data.get('message', f'Erreur HTTP {response.status_code}'),
-                'details': error_data
-            }
+        response.raise_for_status() # Lève une exception pour les codes d'erreur HTTP (4xx ou 5xx)
+
+        fedapay_response = response.json()
+        
+        # Le code de statut 201 (Created) indique que la requête de virement a été acceptée
+        return {
+            'success': True,
+            'transaction_id': fedapay_response.get('id'),
+            'reference': fedapay_response.get('reference'),
+            'status': fedapay_response.get('status') # Sera 'pending' ou 'processing'
+        }
             
+    except requests.exceptions.HTTPError as e:
+        error_details = e.response.json() if e.response.content else {}
+        return {
+            'success': False,
+            'error': error_details.get('message', f'Erreur FedaPay: {e.response.status_code}'),
+            'details': error_details
+        }
     except requests.exceptions.RequestException as e:
-        return {
-            'success': False,
-            'error': f'Erreur de connexion FedaPay: {str(e)}'
-        }
+        return {'success': False, 'error': f'Erreur de connexion FedaPay: {str(e)}'}
     except Exception as e:
-        return {
-            'success': False,
-            'error': f'Erreur interne: {str(e)}'
-        }
+        return {'success': False, 'error': f'Erreur interne: {str(e)}'}
 
 # ===============================================
 # 4. WEBHOOK POUR TRAITER LES CONFIRMATIONS FEDAPAY
@@ -513,6 +526,7 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 
