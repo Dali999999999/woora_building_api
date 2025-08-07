@@ -5,6 +5,7 @@ from app.utils.helpers import generate_unique_referral_code
 from app import db
 import requests
 import os
+from sqlalchemy import func
 
 # On crée un nouveau "blueprint" spécifiquement pour les agents
 agents_bp = Blueprint('agents', __name__, url_prefix='/agents')
@@ -511,5 +512,6 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
