@@ -255,13 +255,13 @@ def get_commission_summary():
 @agents_bp.route('/commissions/request_payout', methods=['POST'])
 @jwt_required()
 def request_commission_payout():
-    """Demander un versement de commissions. Cette version est corrigée et complète."""
+    """Demander un versement de commissions en se basant sur le solde du portefeuille."""
     try:
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
         
         if not user or user.role != 'agent':
-            return jsonify({'error': 'Accès refusé. Seuls les agents peuvent effectuer cette action'}), 403
+            return jsonify({'error': 'Accès refusé.'}), 403
         
         data = request.get_json()
         payment_details = {
@@ -271,24 +271,20 @@ def request_commission_payout():
         }
         
         if not all(payment_details.values()):
-            return jsonify({'error': 'Données de paiement manquantes: phone_number, mode et country_iso sont requis.'}), 400
+            return jsonify({'error': 'Données de paiement manquantes.'}), 400
         
-        # ✅ CORRECTION 1 : Remplacement du placeholder "..." par la vraie condition de filtrage.
-        # Calculer le montant total des commissions en attente pour CET agent.
-        total_pending = db.session.query(func.sum(Commission.amount)).filter(
-            Commission.agent_id == current_user_id,
-            Commission.status == 'pending'
-        ).scalar() or 0
+        # ✅ CORRECTION LOGIQUE : On vérifie le solde directement depuis le portefeuille de l'utilisateur.
+        # C'est la source de vérité pour l'argent disponible.
+        available_balance = float(user.wallet_balance or 0.0)
         
         min_amount = 1000  # Minimum 1000 FCFA
-        if float(total_pending) < min_amount:
+        if available_balance < min_amount:
             return jsonify({
                 'error': f'Montant insuffisant. Minimum requis: {min_amount} FCFA',
-                'available_amount': float(total_pending)
+                'available_amount': available_balance
             }), 400
-        
-        # ✅ CORRECTION 2 : Remplacement du placeholder "..." par la vraie condition de filtrage.
-        # Vérifier s'il n'y a pas déjà une demande en cours (en attente ou en traitement).
+            
+        # On vérifie s'il y a déjà une demande en cours pour éviter les doublons.
         existing_request = PayoutRequest.query.filter(
             PayoutRequest.agent_id == current_user_id,
             PayoutRequest.status.in_(['pending', 'processing'])
@@ -296,16 +292,17 @@ def request_commission_payout():
         
         if existing_request:
             return jsonify({
-                'error': 'Une demande de versement est déjà en cours',
+                'error': 'Une demande de versement est déjà en cours.',
                 'existing_request': existing_request.to_dict()
-            }), 409 # 409 Conflict est plus approprié ici
+            }), 409
 
-        # --- La suite de la logique reste la même ---
+        # Le montant à verser est la totalité du solde disponible.
+        amount_to_payout = available_balance
 
         # Créer la demande de versement
         payout_request = PayoutRequest(
             agent_id=current_user_id,
-            requested_amount=total_pending,
+            requested_amount=amount_to_payout,
             payment_method=payment_details['mode'],
             phone_number=payment_details['phone_number'],
             status='pending'
@@ -314,7 +311,7 @@ def request_commission_payout():
         db.session.add(payout_request)
         db.session.commit()
         
-        # Initier le paiement avec FedaPay (la fonction initiate_fedapay_payout reste la même que celle que je vous ai fournie)
+        # Initier le paiement avec FedaPay
         fedapay_result = initiate_fedapay_payout(payout_request, payment_details)
         
         if fedapay_result.get('success'):
@@ -328,7 +325,7 @@ def request_commission_payout():
         db.session.commit()
         
         return jsonify({
-            'message': 'Demande de versement transmise avec succès à FedaPay.',
+            'message': 'Demande de virement transmise avec succès à FedaPay.',
             'payout_request': payout_request.to_dict()
         }), 201
         
@@ -497,63 +494,70 @@ def initiate_fedapay_payout(payout_request, payment_details):
 
 @agents_bp.route('/webhooks/fedapay/payout', methods=['POST'])
 def fedapay_payout_webhook():
-    """Webhook pour traiter les notifications de versement FedaPay"""
+    """Webhook pour traiter les notifications de versement FedaPay et mettre à jour le solde."""
     try:
-        data = request.get_json()
-        
+        data = request.get_json().get('data', {}) # Le payload est souvent dans une clé "data"
+        event = request.get_json().get('event') # ex: 'payout.approved'
+
+        if not data or not event:
+             # Si la structure n'est pas celle attendue, on prend le JSON racine
+             data = request.get_json()
+             event = data.get('name') # FedaPay utilise 'name' pour l'événement et 'data' pour le payload
+
         transaction_id = data.get('id')
-        status = data.get('status')
+        status = data.get('status') # approved, declined, etc.
         
         if not transaction_id:
-            return jsonify({'error': 'Transaction ID manquant'}), 400
+            return jsonify({'error': 'ID de transaction manquant dans le webhook'}), 400
         
-        # Trouver la demande de versement correspondante
-        payout_request = PayoutRequest.query.filter_by(
-            fedapay_transaction_id=str(transaction_id)
-        ).first()
+        payout_request = PayoutRequest.query.filter_by(fedapay_transaction_id=str(transaction_id)).first()
         
         if not payout_request:
             return jsonify({'error': 'Demande de versement non trouvée'}), 404
         
-        # Traiter selon le statut
+        # Éviter de traiter plusieurs fois le même webhook
+        if payout_request.status == 'completed' or payout_request.status == 'failed':
+            return jsonify({'message': 'Webhook déjà traité'}), 200
+
         if status == 'approved':
-            # Versement réussi
+            # ✅ CORRECTION LOGIQUE : Mettre à jour le solde du portefeuille
+            agent = User.query.get(payout_request.agent_id)
+            if agent:
+                current_balance = float(agent.wallet_balance or 0.0)
+                payout_amount = float(payout_request.requested_amount)
+                agent.wallet_balance = current_balance - payout_amount
+            
             payout_request.status = 'completed'
             payout_request.completed_at = datetime.utcnow()
-            payout_request.actual_amount = payout_request.requested_amount
+            payout_request.actual_amount = payout_request.requested_amount # On suppose que le montant versé est celui demandé
             
-            # Marquer les commissions comme payées
+            # Marquer toutes les commissions 'pending' comme 'paid'
             Commission.query.filter(
                 Commission.agent_id == payout_request.agent_id,
                 Commission.status == 'pending'
             ).update({'status': 'paid'})
             
-            # Créer une transaction de versement
+            # Créer une transaction de type 'commission_payout'
             transaction = Transaction(
                 user_id=payout_request.agent_id,
-                amount=payout_request.actual_amount,
+                amount=-payout_request.actual_amount, # Montant négatif car c'est un retrait
                 type='commission_payout',
-                description=f'Versement de commissions (Payout #{payout_request.id})',
+                description=f'Virement FedaPay (Payout #{payout_request.id})',
                 related_entity_id=str(payout_request.id)
             )
             db.session.add(transaction)
             
         elif status in ['declined', 'failed']:
-            # Versement échoué
             payout_request.status = 'failed'
-            payout_request.error_message = data.get('reason', 'Versement échoué')
-            
-        elif status == 'pending':
-            # Versement en cours
-            payout_request.status = 'processing'
+            payout_request.error_message = data.get('last_error_message', 'Versement échoué par FedaPay')
         
         db.session.commit()
-        
         return jsonify({'message': 'Webhook traité avec succès'}), 200
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Erreur Webhook FedaPay: {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne lors du traitement du webhook'}), 500
 
 # ===============================================
 # 5. ROUTE POUR L'HISTORIQUE DES VERSEMENTS
@@ -596,6 +600,7 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 
