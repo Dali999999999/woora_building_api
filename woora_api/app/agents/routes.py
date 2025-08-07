@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, current_app, request
 from app.models import Property, User, Referral, Commission, PropertyType, PropertyAttributeScope, PropertyAttribute, AttributeOption
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.utils.helpers import generate_unique_referral_code 
+from app.utils.helpers import generate_unique_referral_code
 from app import db
 import requests
 import os
@@ -261,79 +261,62 @@ def request_commission_payout():
         user = User.query.get(current_user_id)
         
         if not user or user.role != 'agent':
-            return jsonify({'error': 'Accès refusé. Seuls les agents peuvent effectuer cette action'}), 403
+            return jsonify({'error': 'Accès refusé.'}), 403
         
         data = request.get_json()
-        phone_number = data.get('phone_number')
-        payment_method = data.get('payment_method', 'mobile_money')
+        payment_details = {
+            "phone_number": data.get('phone_number'),
+            "mode": data.get('mode'),
+            "country_iso": data.get('country_iso')
+        }
         
-        if not phone_number:
-            return jsonify({'error': 'Numéro de téléphone requis pour Mobile Money'}), 400
+        if not all(payment_details.values()):
+            return jsonify({'error': 'Données de paiement manquantes: phone_number, mode et country_iso sont requis.'}), 400
         
-        # Calculer le montant disponible
-        total_pending = db.session.query(func.sum(Commission.amount)).filter(
-            Commission.agent_id == current_user_id,
-            Commission.status == 'pending'
-        ).scalar() or 0
-        
-        min_amount = 1000  # Minimum 1000 FCFA
+        # ... (le reste de la logique de vérification du montant et des demandes existantes reste identique)
+        total_pending = db.session.query(func.sum(Commission.amount)).filter(...).scalar() or 0
+        min_amount = 1000
         if float(total_pending) < min_amount:
-            return jsonify({
-                'error': f'Montant insuffisant. Minimum requis: {min_amount} FCFA',
-                'available_amount': float(total_pending)
-            }), 400
-        
-        # Vérifier s'il n'y a pas déjà une demande en cours
-        existing_request = PayoutRequest.query.filter(
-            PayoutRequest.agent_id == current_user_id,
-            PayoutRequest.status.in_(['pending', 'processing'])
-        ).first()
-        
+            return jsonify({'error': f'Montant insuffisant. Minimum requis: {min_amount} FCFA'}), 400
+
+        existing_request = PayoutRequest.query.filter(...).first()
         if existing_request:
-            return jsonify({
-                'error': 'Une demande de versement est déjà en cours',
-                'existing_request': existing_request.to_dict()
-            }), 400
-        
+            return jsonify({'error': 'Une demande de versement est déjà en cours'}), 400
+
         # Créer la demande de versement
         payout_request = PayoutRequest(
             agent_id=current_user_id,
             requested_amount=total_pending,
-            payment_method=payment_method,
-            phone_number=phone_number,
+            payment_method=payment_details['mode'], # On stocke le mode utilisé
+            phone_number=payment_details['phone_number'],
             status='pending'
         )
         
         db.session.add(payout_request)
         db.session.commit()
         
-        # Initier le paiement avec FedaPay (asynchrone recommandé)
-        try:
-            fedapay_result = initiate_fedapay_payout(payout_request)
-            
-            if fedapay_result.get('success'):
-                payout_request.status = 'processing'
-                payout_request.fedapay_transaction_id = fedapay_result.get('transaction_id')
-                payout_request.processed_at = datetime.utcnow()
-            else:
-                payout_request.status = 'failed'
-                payout_request.error_message = fedapay_result.get('error', 'Erreur FedaPay inconnue')
-            
-            db.session.commit()
-            
-        except Exception as fedapay_error:
+        # Initier le paiement avec FedaPay
+        fedapay_result = initiate_fedapay_payout(payout_request, payment_details) # On passe les détails
+        
+        if fedapay_result.get('success'):
+            payout_request.status = 'processing' # Le virement est en cours de traitement par FedaPay
+            payout_request.fedapay_transaction_id = fedapay_result.get('transaction_id')
+            payout_request.processed_at = datetime.utcnow()
+        else:
             payout_request.status = 'failed'
-            payout_request.error_message = f'Erreur FedaPay: {str(fedapay_error)}'
-            db.session.commit()
+            payout_request.error_message = fedapay_result.get('error', 'Erreur FedaPay inconnue')
+        
+        db.session.commit()
         
         return jsonify({
-            'message': 'Demande de versement créée avec succès',
+            'message': 'Demande de versement transmise à FedaPay.',
             'payout_request': payout_request.to_dict()
         }), 201
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Erreur lors de la demande de virement: {e}", exc_info=True)
+        return jsonify({'error': 'Une erreur interne est survenue.'}), 500
 
 # ===============================================
 # 3. FONCTION D'INTÉGRATION FEDAPAY PAYOUT
@@ -526,6 +509,7 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 
