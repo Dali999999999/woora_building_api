@@ -344,7 +344,7 @@ def initiate_fedapay_payout(payout_request, payment_details):
     try:
         is_sandbox = os.getenv('FLASK_ENV', 'production') != 'production'
         
-        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY_SANDBOX' if is_sandbox else 'FEDAPAY_SECRET_KEY')
+        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY')
         fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
         
         if not fedapay_api_key:
@@ -416,7 +416,7 @@ def initiate_fedapay_payout(payout_request, payment_details):
         # Idéalement, à mettre dans la configuration de l'app Flask
         is_sandbox = os.getenv('FLASK_ENV', 'production') != 'production'
         
-        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY_SANDBOX' if is_sandbox else 'FEDAPAY_SECRET_KEY')
+        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY')
         fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
         
         if not fedapay_api_key:
@@ -600,6 +600,7 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 
