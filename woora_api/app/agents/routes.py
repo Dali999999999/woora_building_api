@@ -339,12 +339,13 @@ def request_commission_payout():
 
 def initiate_fedapay_payout(payout_request, payment_details):
     """
-    Initier un versement via FedaPay API en utilisant la structure de payload correcte.
+    Initier un versement via FedaPay API.
+    ✅ AJOUT : Logger explicitement la réponse d'erreur complète de FedaPay.
     """
     try:
         is_sandbox = os.getenv('FLASK_ENV', 'production') != 'production'
         
-        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY')
+        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY_SANDBOX' if is_sandbox else 'FEDAPAY_SECRET_KEY')
         fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
         
         if not fedapay_api_key:
@@ -368,7 +369,6 @@ def initiate_fedapay_payout(payout_request, payment_details):
                     "country": country_iso.lower()
                 }
             },
-            # Le webhook doit pointer vers l'URL publique de votre API
             "callback_url": f"{os.getenv('API_BASE_URL')}/webhooks/fedapay/payout"
         }
         
@@ -377,13 +377,9 @@ def initiate_fedapay_payout(payout_request, payment_details):
             'Content-Type': 'application/json'
         }
         
-        response = requests.post(
-            f'{fedapay_base_url}/payouts',
-            json=payout_data,
-            headers=headers,
-            timeout=30
-        )
+        response = requests.post(f'{fedapay_base_url}/payouts', json=payout_data, headers=headers, timeout=30)
         
+        # Lève une exception si le statut est une erreur (4xx ou 5xx)
         response.raise_for_status()
         fedapay_response = response.json()
         
@@ -395,11 +391,30 @@ def initiate_fedapay_payout(payout_request, payment_details):
         }
             
     except requests.exceptions.HTTPError as e:
-        error_details = e.response.json() if e.response.content else {}
-        return {'success': False, 'error': error_details.get('message', f'Erreur FedaPay: {e.response.status_code}'), 'details': error_details}
+        # ================== LA CORRECTION EST ICI ==================
+        error_details = {}
+        try:
+            error_details = e.response.json()
+            # On log l'erreur COMPLÈTE de FedaPay sur une ligne dédiée
+            current_app.logger.error(f"ERREUR COMPLÈTE DE FEDAPAY: {error_details}")
+        except ValueError:
+            # Si la réponse n'est pas du JSON
+            error_details = {'message': e.response.text}
+            current_app.logger.error(f"ERREUR COMPLÈTE DE FEDAPAY (non-JSON): {e.response.text}")
+
+        return {
+            'success': False,
+            # On retourne le message complet, même si le log principal est tronqué
+            'error': error_details.get('message', f'Erreur HTTP {e.response.status_code}'),
+            'details': error_details
+        }
+        # ==========================================================
+
     except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"ERREUR DE CONNEXION FEDAPAY: {str(e)}")
         return {'success': False, 'error': f'Erreur de connexion FedaPay: {str(e)}'}
     except Exception as e:
+        current_app.logger.error(f"ERREUR INTERNE (initiate_payout): {str(e)}", exc_info=True)
         return {'success': False, 'error': f'Erreur interne: {str(e)}'}
 
 # ===============================================
@@ -600,6 +615,7 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 
