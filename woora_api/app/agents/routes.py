@@ -6,7 +6,9 @@ from app import db
 import requests
 import os
 from sqlalchemy import func
-from app.models import PayoutRequest
+from app.models import PayoutRequest, Transaction
+from datetime import datetime
+import json
 
 # On crée un nouveau "blueprint" spécifiquement pour les agents
 agents_bp = Blueprint('agents', __name__, url_prefix='/agents')
@@ -334,104 +336,20 @@ def request_commission_payout():
         current_app.logger.error(f"Erreur lors de la demande de virement: {e}", exc_info=True)
         return jsonify({'error': 'Une erreur interne est survenue.'}), 500
 
-# Assurez-vous que la fonction initiate_fedapay_payout est aussi présente dans ce fichier ou importée correctement
-# Je la remets ici pour être sûr qu'elle soit complète.
-
-def initiate_fedapay_payout(payout_request, payment_details):
-    """
-    Initier un versement via FedaPay API.
-    ✅ AJOUT : Logger explicitement la réponse d'erreur complète de FedaPay.
-    """
-    try:
-        is_sandbox = os.getenv('FLASK_ENV', 'production') != 'production'
-        
-        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY_SANDBOX' if is_sandbox else 'FEDAPAY_SECRET_KEY')
-        fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
-        
-        if not fedapay_api_key:
-            raise Exception('Clé API FedaPay manquante pour l\'environnement actuel.')
-
-        phone_number = payment_details.get('phone_number')
-        mode = payment_details.get('mode')
-        country_iso = payment_details.get('country_iso')
-
-        payout_data = {
-            "amount": int(float(payout_request.requested_amount)),
-            "currency": {"iso": "XOF"},
-            "mode": mode,
-            "description": f"Versement commission Woora agent #{payout_request.agent_id}",
-            "customer": {
-                "firstname": payout_request.agent.first_name or "Agent",
-                "lastname": payout_request.agent.last_name or f"#{payout_request.agent_id}",
-                "email": payout_request.agent.email,
-                "phone_number": {
-                    "number": phone_number,
-                    "country": country_iso.lower()
-                }
-            },
-            "callback_url": f"{os.getenv('API_BASE_URL')}/webhooks/fedapay/payout"
-        }
-        
-        headers = {
-            'Authorization': f'Bearer {fedapay_api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        response = requests.post(f'{fedapay_base_url}/payouts', json=payout_data, headers=headers, timeout=30)
-        
-        # Lève une exception si le statut est une erreur (4xx ou 5xx)
-        response.raise_for_status()
-        fedapay_response = response.json()
-        
-        return {
-            'success': True,
-            'transaction_id': fedapay_response.get('id'),
-            'reference': fedapay_response.get('reference'),
-            'status': fedapay_response.get('status')
-        }
-            
-    except requests.exceptions.HTTPError as e:
-        # ================== LA CORRECTION EST ICI ==================
-        error_details = {}
-        try:
-            error_details = e.response.json()
-            # On log l'erreur COMPLÈTE de FedaPay sur une ligne dédiée
-            current_app.logger.error(f"ERREUR COMPLÈTE DE FEDAPAY: {error_details}")
-        except ValueError:
-            # Si la réponse n'est pas du JSON
-            error_details = {'message': e.response.text}
-            current_app.logger.error(f"ERREUR COMPLÈTE DE FEDAPAY (non-JSON): {e.response.text}")
-
-        return {
-            'success': False,
-            # On retourne le message complet, même si le log principal est tronqué
-            'error': error_details.get('message', f'Erreur HTTP {e.response.status_code}'),
-            'details': error_details
-        }
-        # ==========================================================
-
-    except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"ERREUR DE CONNEXION FEDAPAY: {str(e)}")
-        return {'success': False, 'error': f'Erreur de connexion FedaPay: {str(e)}'}
-    except Exception as e:
-        current_app.logger.error(f"ERREUR INTERNE (initiate_payout): {str(e)}", exc_info=True)
-        return {'success': False, 'error': f'Erreur interne: {str(e)}'}
-
 # ===============================================
-# 3. FONCTION D'INTÉGRATION FEDAPAY PAYOUT
+# 3. FONCTION D'INTÉGRATION FEDAPAY PAYOUT (VERSION UNIQUE ET CORRIGÉE)
 # ===============================================
 
 def initiate_fedapay_payout(payout_request, payment_details):
     """
-    Initier un versement via FedaPay API en utilisant la structure de payload correcte.
+    Initier un versement via FedaPay API avec logging complet des réponses.
     Documentation: https://docs.fedapay.com/payments/payouts
     """
     try:
         # Déterminer si on est en mode sandbox ou production
-        # Idéalement, à mettre dans la configuration de l'app Flask
         is_sandbox = os.getenv('FLASK_ENV', 'production') != 'production'
         
-        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY')
+        fedapay_api_key = os.getenv('FEDAPAY_SECRET_KEY_SANDBOX' if is_sandbox else 'FEDAPAY_SECRET_KEY')
         fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
         
         if not fedapay_api_key:
@@ -468,16 +386,34 @@ def initiate_fedapay_payout(payout_request, payment_details):
             'Content-Type': 'application/json'
         }
         
+        # ✅ AMÉLIORATION: Logger la requête envoyée à FedaPay
+        current_app.logger.info(f"=== REQUÊTE FEDAPAY PAYOUT ===")
+        current_app.logger.info(f"URL: {fedapay_base_url}/payouts")
+        current_app.logger.info(f"Headers: {json.dumps(headers, indent=2)}")
+        current_app.logger.info(f"Payload: {json.dumps(payout_data, indent=2)}")
+        current_app.logger.info(f"=== FIN REQUÊTE FEDAPAY ===")
+        
         # Étape 1: Créer le virement (Payout)
-        # La documentation FedaPay indique que la création et l'envoi peuvent être faits en une seule étape
-        # via l'endpoint /payouts. Il n'est pas toujours nécessaire d'appeler /start séparément.
-        # Nous allons suivre le modèle de création direct.
         response = requests.post(
             f'{fedapay_base_url}/payouts',
             json=payout_data,
             headers=headers,
             timeout=30
         )
+        
+        # ✅ AMÉLIORATION: Logger la réponse complète de FedaPay (SUCCÈS)
+        current_app.logger.info(f"=== RÉPONSE FEDAPAY PAYOUT ===")
+        current_app.logger.info(f"Status Code: {response.status_code}")
+        current_app.logger.info(f"Headers: {dict(response.headers)}")
+        
+        # Logger le contenu de la réponse, qu'elle soit en JSON ou en texte
+        try:
+            response_json = response.json()
+            current_app.logger.info(f"Response Body (JSON): {json.dumps(response_json, indent=2)}")
+        except ValueError:
+            current_app.logger.info(f"Response Body (TEXT): {response.text}")
+        
+        current_app.logger.info(f"=== FIN RÉPONSE FEDAPAY ===")
         
         response.raise_for_status() # Lève une exception pour les codes d'erreur HTTP (4xx ou 5xx)
 
@@ -488,19 +424,44 @@ def initiate_fedapay_payout(payout_request, payment_details):
             'success': True,
             'transaction_id': fedapay_response.get('id'),
             'reference': fedapay_response.get('reference'),
-            'status': fedapay_response.get('status') # Sera 'pending' ou 'processing'
+            'status': fedapay_response.get('status'), # Sera 'pending' ou 'processing'
+            'full_response': fedapay_response  # Pour un debugging complet
         }
             
     except requests.exceptions.HTTPError as e:
-        error_details = e.response.json() if e.response.content else {}
+        # ✅ AMÉLIORATION: Logger la réponse complète de FedaPay (ERREUR)
+        current_app.logger.error(f"=== ERREUR HTTP FEDAPAY PAYOUT ===")
+        current_app.logger.error(f"Status Code: {e.response.status_code}")
+        current_app.logger.error(f"Headers: {dict(e.response.headers)}")
+        
+        error_details = {}
+        try:
+            error_details = e.response.json()
+            current_app.logger.error(f"Response Body (JSON): {json.dumps(error_details, indent=2)}")
+        except ValueError:
+            error_details = {'message': e.response.text}
+            current_app.logger.error(f"Response Body (TEXT): {e.response.text}")
+        
+        current_app.logger.error(f"=== FIN ERREUR HTTP FEDAPAY ===")
+        
         return {
             'success': False,
-            'error': error_details.get('message', f'Erreur FedaPay: {e.response.status_code}'),
-            'details': error_details
+            'error': error_details.get('message', f'Erreur HTTP {e.response.status_code}'),
+            'details': error_details,
+            'status_code': e.response.status_code
         }
+        
     except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"=== ERREUR DE CONNEXION FEDAPAY ===")
+        current_app.logger.error(f"Erreur: {str(e)}")
+        current_app.logger.error(f"=== FIN ERREUR DE CONNEXION ===")
+        
         return {'success': False, 'error': f'Erreur de connexion FedaPay: {str(e)}'}
     except Exception as e:
+        current_app.logger.error(f"=== ERREUR INTERNE PAYOUT ===")
+        current_app.logger.error(f"Erreur: {str(e)}", exc_info=True)
+        current_app.logger.error(f"=== FIN ERREUR INTERNE ===")
+        
         return {'success': False, 'error': f'Erreur interne: {str(e)}'}
 
 # ===============================================
@@ -511,16 +472,25 @@ def initiate_fedapay_payout(payout_request, payment_details):
 def fedapay_payout_webhook():
     """Webhook pour traiter les notifications de versement FedaPay et mettre à jour le solde."""
     try:
-        data = request.get_json().get('data', {}) # Le payload est souvent dans une clé "data"
-        event = request.get_json().get('event') # ex: 'payout.approved'
+        # ✅ AMÉLIORATION: Logger la requête webhook complète
+        webhook_data = request.get_json()
+        current_app.logger.info(f"=== WEBHOOK FEDAPAY PAYOUT REÇU ===")
+        current_app.logger.info(f"Headers: {dict(request.headers)}")
+        current_app.logger.info(f"Body: {json.dumps(webhook_data, indent=2)}")
+        current_app.logger.info(f"=== FIN WEBHOOK REÇU ===")
+        
+        data = webhook_data.get('data', {}) # Le payload est souvent dans une clé "data"
+        event = webhook_data.get('event') # ex: 'payout.approved'
 
         if not data or not event:
              # Si la structure n'est pas celle attendue, on prend le JSON racine
-             data = request.get_json()
+             data = webhook_data
              event = data.get('name') # FedaPay utilise 'name' pour l'événement et 'data' pour le payload
 
         transaction_id = data.get('id')
         status = data.get('status') # approved, declined, etc.
+        
+        current_app.logger.info(f"Webhook traité - Event: {event}, Transaction ID: {transaction_id}, Status: {status}")
         
         if not transaction_id:
             return jsonify({'error': 'ID de transaction manquant dans le webhook'}), 400
@@ -528,10 +498,12 @@ def fedapay_payout_webhook():
         payout_request = PayoutRequest.query.filter_by(fedapay_transaction_id=str(transaction_id)).first()
         
         if not payout_request:
+            current_app.logger.warning(f"Demande de versement non trouvée pour transaction_id: {transaction_id}")
             return jsonify({'error': 'Demande de versement non trouvée'}), 404
         
         # Éviter de traiter plusieurs fois le même webhook
         if payout_request.status == 'completed' or payout_request.status == 'failed':
+            current_app.logger.info(f"Webhook déjà traité pour payout_request {payout_request.id}")
             return jsonify({'message': 'Webhook déjà traité'}), 200
 
         if status == 'approved':
@@ -541,16 +513,20 @@ def fedapay_payout_webhook():
                 current_balance = float(agent.wallet_balance or 0.0)
                 payout_amount = float(payout_request.requested_amount)
                 agent.wallet_balance = current_balance - payout_amount
+                
+                current_app.logger.info(f"Solde agent {agent.id} mis à jour: {current_balance} -> {agent.wallet_balance}")
             
             payout_request.status = 'completed'
             payout_request.completed_at = datetime.utcnow()
             payout_request.actual_amount = payout_request.requested_amount # On suppose que le montant versé est celui demandé
             
             # Marquer toutes les commissions 'pending' comme 'paid'
-            Commission.query.filter(
+            updated_commissions = Commission.query.filter(
                 Commission.agent_id == payout_request.agent_id,
                 Commission.status == 'pending'
             ).update({'status': 'paid'})
+            
+            current_app.logger.info(f"{updated_commissions} commissions marquées comme payées pour l'agent {payout_request.agent_id}")
             
             # Créer une transaction de type 'commission_payout'
             transaction = Transaction(
@@ -565,20 +541,27 @@ def fedapay_payout_webhook():
         elif status in ['declined', 'failed']:
             payout_request.status = 'failed'
             payout_request.error_message = data.get('last_error_message', 'Versement échoué par FedaPay')
+            
+            current_app.logger.error(f"Payout {payout_request.id} échoué: {payout_request.error_message}")
         
         db.session.commit()
+        
+        current_app.logger.info(f"Webhook FedaPay traité avec succès pour payout_request {payout_request.id}")
         return jsonify({'message': 'Webhook traité avec succès'}), 200
         
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erreur Webhook FedaPay: {e}", exc_info=True)
+        current_app.logger.error(f"=== ERREUR WEBHOOK FEDAPAY ===")
+        current_app.logger.error(f"Erreur: {str(e)}", exc_info=True)
+        current_app.logger.error(f"=== FIN ERREUR WEBHOOK ===")
+        
         return jsonify({'error': 'Erreur interne lors du traitement du webhook'}), 500
 
 # ===============================================
 # 5. ROUTE POUR L'HISTORIQUE DES VERSEMENTS
 # ===============================================
 
-@agents_bp.route('/agents/commissions/payout_history', methods=['GET'])
+@agents_bp.route('/commissions/payout_history', methods=['GET'])
 @jwt_required()
 def get_payout_history():
     """Récupérer l'historique des demandes de versement"""
@@ -615,14 +598,3 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-
-
-
-
-
-
-
-
-
