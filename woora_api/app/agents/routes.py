@@ -252,7 +252,7 @@ def get_commission_summary():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@agents_bp.route('/agents/commissions/request_payout', methods=['POST'])
+@agents_bp.route('/commissions/request_payout', methods=['POST'])
 @jwt_required()
 def request_commission_payout():
     """Demander un versement de commissions"""
@@ -513,6 +513,7 @@ def get_payout_history():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 
