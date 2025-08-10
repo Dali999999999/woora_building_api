@@ -4,6 +4,7 @@ from flask_mail import Mail
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS # Import CORS
 from config import Config
+import re
 
 db = SQLAlchemy()
 mail = Mail()
