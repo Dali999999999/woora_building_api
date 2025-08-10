@@ -20,7 +20,7 @@ def create_app():
     db.init_app(app)
     mail.init_app(app)
     jwt.init_app(app)
-    CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+    CORS(app, resources={r"/*": {"origins": re.compile(r"http://localhost:[0-9]+")}})
 
     # Gestionnaires d'erreurs JWT
     @jwt.expired_token_loader
