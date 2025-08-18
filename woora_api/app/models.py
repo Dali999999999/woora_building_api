@@ -240,6 +240,8 @@ class PropertyRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     customer = db.relationship('User', backref='property_requests')
     property_type = db.relationship('PropertyType', backref='property_requests')
+    customer = db.relationship('User', backref='property_requests')
+    property_type = db.relationship('PropertyType', backref='property_requests')
 
 class Commission(db.Model):
     __tablename__ = 'Commissions'
