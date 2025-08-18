@@ -1,7 +1,7 @@
 # app/seekers/routes.py
 
 from flask import Blueprint, request, jsonify, current_app
-from app.models import Property, User, VisitRequest, Referral
+from app.models import Property, User, VisitRequest, Referral, PropertyRequest
 from app import db # Assurez-vous que l'import de 'db' est correct
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
