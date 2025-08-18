@@ -262,3 +262,39 @@ def purchase_visit_passes():
     except Exception as e:
         current_app.logger.error(f"Erreur lors de la vérification de la transaction Fedapay: {e}", exc_info=True)
         return jsonify({'message': "Erreur interne du serveur lors de la vérification du paiement."}), 500
+
+@seekers_bp.route('/property-requests', methods=['POST'])
+@jwt_required()
+def create_property_request():
+    """
+    Permet à un client de soumettre une alerte / demande de bien.
+    """
+    current_user_id = get_jwt_identity()
+    customer = User.query.get(current_user_id)
+
+    if not customer or customer.role != 'customer':
+        return jsonify({'message': "Accès refusé."}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': "Données manquantes."}), 400
+
+    new_request = PropertyRequest(
+        customer_id=current_user_id,
+        request_details=data.get('request_details'),
+        city=data.get('city'),
+        property_type_id=data.get('property_type_id'),
+        min_price=data.get('min_price'),
+        max_price=data.get('max_price'),
+        status='new' # Le statut par défaut
+    )
+
+    try:
+        db.session.add(new_request)
+        db.session.commit()
+        # On pourrait notifier l'admin ici, mais c'est optionnel
+        return jsonify({'message': "Votre alerte a bien été enregistrée. Nous vous contacterons bientôt."}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la création de la demande de bien: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur."}), 500
