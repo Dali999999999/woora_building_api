@@ -387,3 +387,45 @@ def mark_property_as_transacted(property_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors du marquage comme 'transacted': {e}", exc_info=True)
         return jsonify({'message': 'Une erreur est survenue lors de la sauvegarde.'}), 500
+
+# Endpoint pour voir toutes les demandes des clients
+@admin_bp.route('/property_requests', methods=['GET'])
+# @jwt_required() et @admin_required
+def get_all_property_requests():
+    requests = PropertyRequest.query.order_by(PropertyRequest.created_at.desc()).all()
+    # Vous pouvez construire une réponse plus détaillée ici si nécessaire
+    return jsonify([req.to_dict() for req in requests]), 200 # Assurez-vous d'avoir une méthode to_dict() sur le modèle
+
+# Endpoint pour répondre à une demande
+@admin_bp.route('/property_requests/<int:request_id>/respond', methods=['POST'])
+# @jwt_required() et @admin_required
+def respond_to_property_request(request_id):
+    prop_request = PropertyRequest.query.get_or_404(request_id)
+    
+    data = request.get_json()
+    response_message = data.get('message')
+    if not response_message:
+        return jsonify({'message': "Un message de réponse est requis."}), 400
+        
+    try:
+        # Mettre à jour la demande dans la base de données
+        prop_request.status = 'contacted'
+        prop_request.admin_notes = response_message
+        
+        # Envoyer l'email de notification au client
+        customer = prop_request.customer
+        if customer:
+            send_admin_response_to_seeker(
+                customer_email=customer.email,
+                customer_name=customer.first_name,
+                original_request=prop_request.request_details,
+                admin_response=response_message
+            )
+
+        db.session.commit()
+        return jsonify({'message': "Réponse envoyée avec succès au client."}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la réponse à une demande de bien: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur."}), 500
