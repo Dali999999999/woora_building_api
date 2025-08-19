@@ -298,3 +298,20 @@ def create_property_request():
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la création de la demande de bien: {e}", exc_info=True)
         return jsonify({'message': "Erreur interne du serveur."}), 500
+
+@seekers_bp.route('/property-requests', methods=['GET'])
+@jwt_required()
+def get_seeker_property_requests():
+    """
+    Récupère l'historique des alertes de recherche pour le client connecté.
+    """
+    current_user_id = get_jwt_identity()
+    customer = User.query.get(current_user_id)
+
+    if not customer or customer.role != 'customer':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    # On récupère toutes les demandes du client, les plus récentes en premier
+    requests = PropertyRequest.query.filter_by(customer_id=current_user_id).order_by(PropertyRequest.created_at.desc()).all()
+    
+    return jsonify([req.to_dict() for req in requests]), 200
