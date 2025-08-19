@@ -243,6 +243,22 @@ class PropertyRequest(db.Model):
     customer = db.relationship('User', backref='property_requests')
     property_type = db.relationship('PropertyType', backref='property_requests')
 
+    # --- AJOUTEZ CETTE MÉTHODE ---
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'request_details': self.request_details,
+            'city': self.city,
+            'property_type_id': self.property_type_id,
+            'property_type_name': self.property_type.name if self.property_type else "Tous types",
+            'min_price': float(self.min_price) if self.min_price is not None else None,
+            'max_price': float(self.max_price) if self.max_price is not None else None,
+            'status': self.status,
+            'admin_notes': self.admin_notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
 class Commission(db.Model):
     __tablename__ = 'Commissions'
     id = db.Column(db.Integer, primary_key=True)
