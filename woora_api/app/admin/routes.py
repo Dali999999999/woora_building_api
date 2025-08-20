@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 from app.models import (
     User, Property, PropertyType, PropertyAttribute, AttributeOption,
     PropertyAttributeScope, db, AppSetting, ServiceFee, VisitRequest,
-    Referral, Commission, Transaction
+    Referral, Commission, Transaction, PropertyRequest
 )
 from app.schemas import VisitSettingsSchema
 from marshmallow import ValidationError
@@ -429,3 +429,4 @@ def respond_to_property_request(request_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la réponse à une demande de bien: {e}", exc_info=True)
         return jsonify({'message': "Erreur interne du serveur."}), 500
+
