@@ -17,6 +17,12 @@ class User(db.Model):
     visit_passes = db.Column(db.Integer, nullable=False, default=0) # Nouvelle colonne
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    profile_picture_url = db.Column(db.String(255), nullable=True)
+    profession = db.Column(db.String(100), nullable=True)
+    address = db.Column(db.String(255), nullable=True)
+    city = db.Column(db.String(100), nullable=True)
+    country = db.Column(db.String(100), nullable=True)
+    bio = db.Column(db.Text, nullable=True)
     
     def __repr__(self):
         return f'<User {self.email}>'
@@ -31,6 +37,12 @@ class User(db.Model):
             'role': self.role,
             'wallet_balance': float(self.wallet_balance) if self.wallet_balance is not None else None,
             'visit_passes': self.visit_passes, # Ajout du champ
+            'profile_picture_url': self.profile_picture_url,
+            'profession': self.profession,
+            'address': self.address,
+            'city': self.city,
+            'country': self.country,
+            'bio': self.bio,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
