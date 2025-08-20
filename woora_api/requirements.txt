@@ -10,3 +10,4 @@ gunicorn
 Flask-CORS>=4.0.0
 mega.py>=1.0.8
 marshmallow
+requests
