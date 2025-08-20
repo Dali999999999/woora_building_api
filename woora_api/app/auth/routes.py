@@ -169,3 +169,75 @@ def reset_password():
         "access_token": access_token,
         "user_role": user.role
     }), 200
+
+@auth_bp.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_user_profile():
+    """
+    Permet à l'utilisateur connecté de mettre à jour ses propres informations de profil.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get_or_404(current_user_id)
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': 'Données manquantes.'}), 400
+
+    # Mettre à jour les champs s'ils sont fournis dans la requête
+    if 'first_name' in data: user.first_name = data['first_name']
+    if 'last_name' in data: user.last_name = data['last_name']
+    if 'phone_number' in data: user.phone_number = data['phone_number']
+    if 'profession' in data: user.profession = data['profession']
+    if 'address' in data: user.address = data['address']
+    if 'city' in data: user.city = data['city']
+    if 'country' in data: user.country = data['country']
+    if 'bio' in data: user.bio = data['bio']
+    
+    try:
+        db.session.commit()
+        return jsonify(user.to_dict()), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la mise à jour du profil: {e}")
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+@auth_bp.route('/profile/upload-picture', methods=['POST'])
+@jwt_required()
+def upload_profile_picture():
+    """
+    Permet à l'utilisateur connecté de téléverser une nouvelle photo de profil.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get_or_404(current_user_id)
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nom de fichier vide'}), 400
+
+    filename = secure_filename(file.filename)
+    tmp_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
+    
+    try:
+        file.save(tmp_path)
+        mega = get_mega_instance()
+        if not mega:
+            return jsonify({'error': 'Connexion au service de stockage impossible'}), 503
+        
+        node = mega.upload(tmp_path)
+        link = mega.get_upload_link(node)
+        
+        # Mettre à jour l'URL de la photo de profil de l'utilisateur
+        user.profile_picture_url = link
+        db.session.commit()
+        
+        return jsonify({'message': 'Photo de profil mise à jour.', 'profile_picture_url': link}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur d'upload de la photo de profil: {e}")
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
