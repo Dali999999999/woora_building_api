@@ -142,3 +142,51 @@ def send_referral_used_notification(agent_email, customer_name, property_title):
         mail.send(msg)
     except Exception as e:
         current_app.logger.error(f"Échec de l'envoi de l'email de notification de parrainage à {agent_email}: {e}")
+
+def send_admin_response_to_seeker(customer_email, customer_name, original_request, admin_response):
+    """
+    Envoie un e-mail au client avec la réponse de l'administrateur à son alerte.
+
+    :param customer_email: L'adresse e-mail du client.
+    :param customer_name: Le prénom du client pour la personnalisation.
+    :param original_request: Le texte de la demande initiale du client.
+    :param admin_response: Le message de réponse rédigé par l'administrateur.
+    """
+    subject = "Réponse à votre alerte de recherche sur Woora Immo"
+    
+    # On utilise html_content pour un email plus riche et mieux formaté
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; color: #333;">
+        <h2>Bonjour {customer_name},</h2>
+        <p>Un de nos administrateurs a examiné votre alerte de recherche de bien et vous a laissé une réponse.</p>
+        <hr>
+        <p><strong>Rappel de votre demande :</strong></p>
+        <blockquote style="border-left: 4px solid #ccc; padding-left: 15px; margin-left: 5px; color: #555;">
+            <em>"{original_request}"</em>
+        </blockquote>
+        <br>
+        <p><strong>Réponse de notre équipe :</strong></p>
+        <div style="background-color: #f2f2f2; border-radius: 8px; padding: 15px;">
+            <p style="margin: 0;">{admin_response}</p>
+        </div>
+        <br>
+        <p>N'hésitez pas à nous recontacter si vous avez d'autres questions.</p>
+        <p>Cordialement,</p>
+        <p><strong>L'équipe Woora Immo</strong></p>
+    </div>
+    """
+
+    msg = Message(
+        subject=subject,
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[customer_email],
+        html=html_body  # On assigne le contenu HTML ici
+    )
+    
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email de réponse à l'alerte envoyé avec succès à {customer_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Échec de l'envoi de l'email de réponse à l'alerte pour {customer_email}: {e}", exc_info=True)
+        return False
