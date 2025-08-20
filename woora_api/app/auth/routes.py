@@ -9,6 +9,12 @@ from datetime import datetime, timedelta
 from flask_jwt_extended import create_access_token
 from app import db
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
+from app.utils.mega_utils import get_mega_instance
+import os
+import uuid
+
+UPLOAD_FOLDER = '/tmp'
 
 auth_bp = Blueprint('auth', __name__)
 
