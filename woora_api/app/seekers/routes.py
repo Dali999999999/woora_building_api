@@ -268,6 +268,8 @@ def purchase_visit_passes():
 def create_property_request():
     """
     Permet à un client de soumettre une alerte / demande de bien.
+    Cette version décode le JSON 'request_details' pour remplir les colonnes
+    structurées de la base de données.
     """
     current_user_id = get_jwt_identity()
     customer = User.query.get(current_user_id)
@@ -279,20 +281,42 @@ def create_property_request():
     if not data:
         return jsonify({'message': "Données manquantes."}), 400
 
+    # --- DÉBUT DE LA LOGIQUE CORRIGÉE ---
+
+    # 1. On récupère la chaîne de caractères JSON envoyée par Flutter
+    request_details_str = data.get('request_details', '{}')
+    try:
+        # 2. On la décode pour la transformer en dictionnaire Python
+        request_values = json.loads(request_details_str)
+    except json.JSONDecodeError:
+        return jsonify({'message': "Le format des détails de la requête est invalide."}), 400
+
+    # 3. On extrait les valeurs pour les colonnes structurées
+    # On utilise .get() pour récupérer les valeurs sans causer d'erreur si elles sont absentes
+    city = request_values.get('city')
+    min_price = request_values.get('min_price')
+    max_price = request_values.get('max_price')
+
+    # 4. On crée l'objet PropertyRequest en assignant chaque valeur à la bonne colonne
     new_request = PropertyRequest(
         customer_id=current_user_id,
-        request_details=data.get('request_details'),
-        city=data.get('city'),
-        property_type_id=data.get('property_type_id'),
-        min_price=data.get('min_price'),
-        max_price=data.get('max_price'),
-        status='new' # Le statut par défaut
+        property_type_id=data.get('property_type_id'), # Vient du niveau supérieur du JSON
+        
+        city=city,
+        min_price=min_price,
+        max_price=max_price,
+        
+        # On sauvegarde la chaîne JSON complète pour référence et pour les attributs dynamiques
+        request_details=request_details_str, 
+        
+        status='new'
     )
+
+    # --- FIN DE LA LOGIQUE CORRIGÉE ---
 
     try:
         db.session.add(new_request)
         db.session.commit()
-        # On pourrait notifier l'admin ici, mais c'est optionnel
         return jsonify({'message': "Votre alerte a bien été enregistrée. Nous vous contacterons bientôt."}), 201
     except Exception as e:
         db.session.rollback()
