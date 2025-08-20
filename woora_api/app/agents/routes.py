@@ -599,3 +599,101 @@ def get_payout_history():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@agents_bp.route('/request-withdrawal', methods=['POST'])
+@jwt_required()
+def request_withdrawal():
+    """
+    Initie une demande de virement (Payout) pour l'agent connecté.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': "Données manquantes."}), 400
+
+    amount = data.get('amount')
+    mode = data.get('mode')
+    phone_number = data.get('phone_number')
+    country_code = data.get('country_code')
+
+    # Valider les entrées
+    if not all([amount, mode, phone_number, country_code]):
+        return jsonify({'message': "Tous les champs sont requis."}), 400
+
+    try:
+        amount_int = int(amount)
+        if amount_int < 1000:
+            return jsonify({'message': "Le montant minimum pour un virement est de 1000 FCFA."}), 400
+        if amount_int > agent.wallet_balance:
+            return jsonify({'message': "Solde insuffisant pour effectuer ce virement."}), 400
+    except (ValueError, TypeError):
+        return jsonify({'message': "Le montant doit être un nombre entier valide."}), 400
+        
+    # --- DÉBUT DE L'INTERACTION AVEC FEDAPAY ---
+    
+    FEDAPAY_API_KEY = os.environ.get('FEDAPAY_SECRET_KEY')
+    FEDAPAY_API_URL = "https://sandbox-api.fedapay.com/v1/payouts"
+
+    headers = {
+        'Authorization': f'Bearer {FEDAPAY_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+    
+    payout_data = {
+        "amount": amount_int,
+        "currency": {"iso": "XOF"},
+        "mode": mode,
+        "customer": {
+            "firstname": agent.first_name,
+            "lastname": agent.last_name,
+            "email": agent.email,
+            "phone_number": {
+                "number": phone_number,
+                "country": country_code
+            }
+        }
+    }
+
+    try:
+        # Étape 1 : Créer le Payout
+        response_create = requests.post(FEDAPAY_API_URL, headers=headers, json=payout_data)
+        response_create.raise_for_status() # Lève une exception pour les erreurs HTTP (4xx ou 5xx)
+        payout_response_data = response_create.json()
+        payout_id = payout_response_data['v1/payout']['id']
+
+        # Étape 2 : Lancer le Payout immédiatement
+        start_url = f"{FEDAPAY_API_URL}/start"
+        start_data = { "payouts": [{ "id": payout_id }] }
+        response_start = requests.put(start_url, headers=headers, json=start_data)
+        response_start.raise_for_status()
+
+        # Étape 3 : Enregistrer la transaction dans notre BDD
+        # L'argent est maintenant "bloqué" en attendant la confirmation de FedaPay
+        # On ne décrémente le solde que lorsque le webhook confirme le statut 'sent'
+        new_transaction = Transaction(
+            user_id=agent.id,
+            amount=Decimal(str(amount_int)), # On stocke en Decimal
+            type='withdrawal',
+            description=f"Demande de virement vers {phone_number} via {mode}.",
+            # On pourrait ajouter une colonne 'status' et 'external_id' à la table Transaction
+            # status='pending', 
+            # external_transaction_id=payout_id 
+        )
+        db.session.add(new_transaction)
+        db.session.commit()
+
+        return jsonify({'message': f"Votre demande de virement de {amount_int} XOF a été initiée."}), 200
+
+    except requests.exceptions.RequestException as e:
+        # Erreurs de communication avec FedaPay
+        current_app.logger.error(f"Erreur FedaPay: {e.response.text if e.response else e}")
+        return jsonify({'message': "Une erreur est survenue lors de la communication avec le service de paiement."}), 503
+    except Exception as e:
+        # Autres erreurs (ex: base de données)
+        db.session.rollback()
+        current_app.logger.error(f"Erreur interne lors de la demande de virement: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
