@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 import os
 import uuid
 from decimal import Decimal
-from app.utils.email_utils import send_admin_rejection_notification, send_admin_confirmation_to_owner
+from app.utils.email_utils import send_admin_rejection_notification, send_admin_confirmation_to_owner, send_admin_response_to_seeker
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -396,10 +396,13 @@ def get_all_property_requests():
     # Vous pouvez construire une réponse plus détaillée ici si nécessaire
     return jsonify([req.to_dict() for req in requests]), 200 # Assurez-vous d'avoir une méthode to_dict() sur le modèle
 
-# Endpoint pour répondre à une demande
 @admin_bp.route('/property_requests/<int:request_id>/respond', methods=['POST'])
 # @jwt_required() et @admin_required
 def respond_to_property_request(request_id):
+    """
+    Permet à un admin de répondre à une alerte, ce qui met à jour le statut
+    et envoie un email de notification au client.
+    """
     prop_request = PropertyRequest.query.get_or_404(request_id)
     
     data = request.get_json()
@@ -412,9 +415,10 @@ def respond_to_property_request(request_id):
         prop_request.status = 'contacted'
         prop_request.admin_notes = response_message
         
-        # Envoyer l'email de notification au client
+        # Récupérer les informations du client pour l'email
         customer = prop_request.customer
         if customer:
+            # Maintenant que la fonction est importée, cet appel fonctionnera
             send_admin_response_to_seeker(
                 customer_email=customer.email,
                 customer_name=customer.first_name,
