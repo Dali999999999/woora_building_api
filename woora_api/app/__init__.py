@@ -21,8 +21,14 @@ def create_app():
     db.init_app(app)
     mail.init_app(app)
     jwt.init_app(app)
-    CORS(app, resources={r"/*": {"origins": re.compile(r"http://localhost:[0-9]+")}})
-
+    CORS(app, resources={
+    r"/*": {
+        "origins": [
+            re.compile(r"http://localhost:[0-9]+"), # ton dev local
+            "https://woora-building-admin.vercel.app"  # ton frontend déployé
+        ]
+    }
+})
     # Gestionnaires d'erreurs JWT
     @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_payload):
