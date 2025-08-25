@@ -434,3 +434,73 @@ def respond_to_property_request(request_id):
         current_app.logger.error(f"Erreur lors de la réponse à une demande de bien: {e}", exc_info=True)
         return jsonify({'message': "Erreur interne du serveur."}), 500
 
+
+@admin_bp.route('/property_attributes/<int:attribute_id>', methods=['PUT'])
+# @jwt_required() et @admin_required # N'oubliez pas d'activer la sécurité
+def update_property_attribute(attribute_id):
+    """
+    Met à jour les détails d'un attribut de propriété existant.
+    """
+    # Récupérer l'attribut depuis la base de données
+    attr = PropertyAttribute.query.get_or_404(attribute_id)
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': 'Données manquantes.'}), 400
+
+    # Mettre à jour le nom (en vérifiant l'unicité)
+    if 'name' in data and data['name'] != attr.name:
+        if PropertyAttribute.query.filter_by(name=data['name']).first():
+            return jsonify({'message': 'Ce nom d\'attribut est déjà utilisé.'}), 409 # Conflict
+        attr.name = data['name']
+
+    # Mettre à jour le type de données
+    if 'data_type' in data:
+        # Si on change un 'enum' en autre chose, on supprime les options associées
+        if attr.data_type == 'enum' and data['data_type'] != 'enum':
+            AttributeOption.query.filter_by(attribute_id=attr.id).delete()
+        attr.data_type = data['data_type']
+        
+    # Mettre à jour l'état "filtrable"
+    if 'is_filterable' in data:
+        attr.is_filterable = data['is_filterable']
+
+    try:
+        db.session.commit()
+        return jsonify({'message': 'Attribut mis à jour avec succès.', 'attribute': attr.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la mise à jour de l'attribut: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+
+@admin_bp.route('/property_attributes/<int:attribute_id>', methods=['DELETE'])
+# @jwt_required() et @admin_required # N'oubliez pas d'activer la sécurité
+def delete_property_attribute(attribute_id):
+    """
+    Supprime un attribut de propriété, après avoir vérifié qu'il n'est pas utilisé.
+    """
+    attr = PropertyAttribute.query.get_or_404(attribute_id)
+
+    # --- VÉRIFICATION D'USAGE (CRUCIAL) ---
+    # On vérifie si un bien utilise cet attribut dans son champ JSON.
+    # C'est une vérification simple mais efficace.
+    properties_using_attribute = Property.query.filter(Property.attributes.isnot(None)).all()
+    
+    for prop in properties_using_attribute:
+        if isinstance(prop.attributes, dict) and attr.name in prop.attributes:
+            # Si on trouve ne serait-ce qu'un seul bien qui utilise cet attribut, on bloque la suppression.
+            return jsonify({
+                'message': f"Impossible de supprimer l'attribut '{attr.name}' car il est utilisé par au moins un bien immobilier (ID: {prop.id})."
+            }), 409 # 409 Conflict
+
+    # Si la vérification passe, l'attribut n'est pas utilisé et peut être supprimé.
+    # La suppression des options et des scopes se fait en cascade grâce à la configuration de la BDD.
+    try:
+        db.session.delete(attr)
+        db.session.commit()
+        return jsonify({'message': 'Attribut supprimé avec succès.'}), 204 # 204 No Content est standard pour un DELETE réussi
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la suppression de l'attribut: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
