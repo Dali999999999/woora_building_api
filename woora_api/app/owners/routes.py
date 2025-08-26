@@ -2,7 +2,7 @@
 
 from flask import Blueprint, request, jsonify, current_app
 from app import db
-from app.models import Property, PropertyImage, User, PropertyType, VisitRequest
+from app.models import Property, PropertyImage, User, PropertyType, VisitRequest,  PropertyAttributeScope, PropertyAttribute, AttributeOption
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
 from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
@@ -526,3 +526,4 @@ def upload_image_for_owner():
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
