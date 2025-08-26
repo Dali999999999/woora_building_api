@@ -23,6 +23,7 @@ class User(db.Model):
     city = db.Column(db.String(100), nullable=True)
     country = db.Column(db.String(100), nullable=True)
     bio = db.Column(db.Text, nullable=True)
+    favorites = db.relationship('UserFavorite', back_populates='user', cascade="all, delete-orphan", lazy='dynamic')
     
     def __repr__(self):
         return f'<User {self.email}>'
@@ -140,6 +141,7 @@ class Property(db.Model):
     is_validated = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    favorited_by = db.relationship('UserFavorite', back_populates='property', cascade="all, delete-orphan", lazy='dynamic')
     
     owner = db.relationship('User', backref='properties')
     property_type = db.relationship('PropertyType', backref='properties')
@@ -343,3 +345,17 @@ class PayoutRequest(db.Model):
             'processed_at': self.processed_at.isoformat() if self.processed_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
         }
+
+class UserFavorite(db.Model):
+    __tablename__ = 'user_favorites' # Nom de la table en base de données
+
+    user_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relations pour un accès facile
+    user = db.relationship('User', back_populates='favorites')
+    property = db.relationship('Property', back_populates='favorited_by')
+
+    def __repr__(self):
+        return f'<UserFavorite user_id={self.user_id} property_id={self.property_id}>'
