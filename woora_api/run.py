@@ -6,6 +6,7 @@ from flask import request, jsonify, send_file, make_response, current_app, send_
 from app.utils.mega_utils import get_mega_instance
 import mimetypes
 import os
+import json
 
 app = create_app()
 
