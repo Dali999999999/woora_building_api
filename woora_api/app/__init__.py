@@ -82,4 +82,7 @@ def create_app():
     from app.customers.routes import customers_bp
     app.register_blueprint(customers_bp)
 
+     from app.main.routes import main_bp
+     app.register_blueprint(main_bp)
+
     return app
