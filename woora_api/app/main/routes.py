@@ -1,7 +1,8 @@
 # app/main/routes.py
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, send_from_directory, current_app
 from app.models import Property
+import os
 
 main_bp = Blueprint('main', __name__)
 
