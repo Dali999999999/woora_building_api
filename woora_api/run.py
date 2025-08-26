@@ -53,6 +53,21 @@ DOWNLOAD_FOLDER = '/tmp' # Ou un autre chemin approprié
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
+@app.route('/.well-known/assetlinks.json')
+    def serve_assetlinks():
+        """
+        Sert le fichier de configuration statique pour les App Links Android.
+        Cette route est définie directement sur l'objet 'app' pour éviter tout préfixe.
+        """
+        # On utilise app.root_path qui pointe vers le dossier racine du projet (où se trouve run.py)
+        directory = os.path.join(app.root_path, '.well-known')
+        
+        try:
+            return send_from_directory(directory, 'assetlinks.json', mimetype='application/json')
+        except FileNotFoundError:
+            # Retourne une erreur 404 claire si le fichier n'est pas trouvé
+            return "assetlinks.json not found", 404
+
 @app.route('/get_image_from_mega_link', methods=['GET'])
 def get_image_from_mega_link():
     app.logger.info("Requête GET reçue sur /get_image_from_mega_link")
