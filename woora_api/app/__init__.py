@@ -88,4 +88,7 @@ def create_app():
     app.register_blueprint(favorites_bp)
     # --- FIN DE L'AJOUT ---
 
+    from app.search.routes import search_bp
+    app.register_blueprint(search_bp)
+
     return app
