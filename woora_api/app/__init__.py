@@ -1,3 +1,5 @@
+# Fichier app/__init__.py ou équivalent
+
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
@@ -14,7 +16,6 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # Définir le niveau de journalisation pour afficher les messages DEBUG
     import logging
     app.logger.setLevel(logging.DEBUG)
 
@@ -24,8 +25,8 @@ def create_app():
     CORS(app, resources={
     r"/*": {
         "origins": [
-            re.compile(r"http://localhost:[0-9]+"), # ton dev local
-            "https://woora-building-admin.vercel.app"  # ton frontend déployé
+            re.compile(r"http://localhost:[0-9]+"),
+            "https://woora-building-admin.vercel.app"
         ]
     }
 })
@@ -33,7 +34,7 @@ def create_app():
     @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_payload):
         app.logger.error("🔑 Token JWT expiré")
-        return jsonify({'message': 'Token expiré'}), 401 # Changed to 401 Unauthorized
+        return jsonify({'message': 'Token expiré'}), 401
 
     @jwt.invalid_token_loader
     def invalid_token_callback(callback_error):
@@ -55,11 +56,8 @@ def create_app():
         app.logger.warning("🔑 Token JWT révoqué")
         return jsonify({'message': 'Token révoqué'}), 401
 
-    # Gestionnaire d'erreur 422 générique
     @app.errorhandler(422)
     def handle_unprocessable_entity(e):
-        # Cette erreur est souvent levée par webargs/marshmallow si utilisé, ou par Flask-JWT-Extended
-        # Nous allons essayer de récupérer les détails si possible
         messages = getattr(e, 'data', {}).get('messages', [str(e)])
         app.logger.error(f'❌ Erreur 422: {messages}')
         return jsonify({'error': 'Unprocessable Entity', 'details': messages}), 422
@@ -84,5 +82,10 @@ def create_app():
 
     from app.main.routes import main_bp
     app.register_blueprint(main_bp)
+
+    # --- AJOUT DU NOUVEAU BLUEPRINT POUR LES FAVORIS ---
+    from app.favorites.routes import favorites_bp
+    app.register_blueprint(favorites_bp)
+    # --- FIN DE L'AJOUT ---
 
     return app
