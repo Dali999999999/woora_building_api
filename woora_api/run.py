@@ -53,40 +53,39 @@ if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
 @app.route('/.well-known/assetlinks.json')
-    def serve_assetlinks():
-        """
-        Sert le fichier de configuration statique pour les App Links Android.
-        Cette version lit le fichier manuellement pour être plus robuste.
-        """
-        try:
-            # On suppose que le dossier .well-known est au même niveau que le dossier 'app'
-            # C'est le chemin le plus courant.
-            # os.path.abspath('.') donne le répertoire de travail actuel.
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            file_path = os.path.join(current_dir, '..', '.well-known', 'assetlinks.json')
-            
-            # Pour Render, la structure peut être différente. On essaie un autre chemin.
-            if not os.path.exists(file_path):
-                # Ce chemin suppose que run.py est dans un sous-dossier comme 'woora_api'
-                file_path = os.path.join(current_dir, '..', '..', '.well-known', 'assetlinks.json')
+def serve_assetlinks():
+    """
+    Sert le fichier de configuration statique pour les App Links Android.
+    Cette version lit le fichier manuellement pour être plus robuste.
+    """
+    try:
+        # On suppose que le dossier .well-known est au même niveau que le dossier 'app'
+        # C'est le chemin le plus courant.
+        # os.path.abspath('.') donne le répertoire de travail actuel.
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(current_dir, '..', '.well-known', 'assetlinks.json')
+        
+        # Pour Render, la structure peut être différente. On essaie un autre chemin.
+        if not os.path.exists(file_path):
+            # Ce chemin suppose que run.py est dans un sous-dossier comme 'woora_api'
+            file_path = os.path.join(current_dir, '..', '..', '.well-known', 'assetlinks.json')
 
-            # Ultime tentative à la racine du projet
-            if not os.path.exists(file_path):
-                file_path = os.path.join(os.path.abspath('.'), '.well-known', 'assetlinks.json')
+        # Ultime tentative à la racine du projet
+        if not os.path.exists(file_path):
+            file_path = os.path.join(os.path.abspath('.'), '.well-known', 'assetlinks.json')
 
-
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-            
-            # On renvoie le contenu JSON avec le bon mimetype
-            return jsonify(data)
-            
-        except FileNotFoundError:
-            current_app.logger.error(f"Fichier assetlinks.json non trouvé au chemin calculé: {file_path}")
-            return "assetlinks.json not found", 404
-        except Exception as e:
-            current_app.logger.error(f"Erreur lors de la lecture de assetlinks.json: {e}")
-            return "Error processing assetlinks.json", 500
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        
+        # On renvoie le contenu JSON avec le bon mimetype
+        return jsonify(data)
+        
+    except FileNotFoundError:
+        current_app.logger.error(f"Fichier assetlinks.json non trouvé au chemin calculé: {file_path}")
+        return "assetlinks.json not found", 404
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la lecture de assetlinks.json: {e}")
+        return "Error processing assetlinks.json", 500
 
 @app.route('/get_image_from_mega_link', methods=['GET'])
 def get_image_from_mega_link():
