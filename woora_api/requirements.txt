@@ -1,13 +1,28 @@
-Flask
-Flask-SQLAlchemy
-Werkzeug
-PyJWT
-python-dotenv
-Flask-Mail
-Flask-JWT-Extended
-pymysql
-gunicorn
-Flask-CORS>=4.0.0
-mega.py>=1.0.8
-marshmallow
-requests
+# requirements.txt
+# Fichier de dépendances Python pour le projet Woora API
+# Les versions sont "épinglées" pour garantir la stabilité en production.
+
+# --- Framework de base ---
+Flask>=2.3.0,<3.0.0
+gunicorn>=21.0.0,<22.0.0
+
+# --- Base de données (ORM) ---
+# NOTE : La spécification explicite de SQLAlchemy est cruciale pour la stabilité.
+Flask-SQLAlchemy>=3.0.0,<3.1.0
+SQLAlchemy>=1.4.40,<2.0.0
+PyMySQL>=1.0.0,<1.1.0
+
+# --- Authentification et Sécurité ---
+Flask-JWT-Extended>=4.4.0,<4.5.0
+PyJWT>=2.6.0,<3.0.0
+Flask-CORS>=4.0.0  # Respect de votre contrainte
+
+# --- Utilitaires ---
+python-dotenv>=1.0.0,<1.1.0
+Werkzeug>=2.3.0,<3.0.0  # Dépendance de Flask, bon à épingler
+Flask-Mail>=0.9.1,<0.10.0
+requests>=2.31.0,<3.0.0
+marshmallow>=3.20.0,<4.0.0
+
+# --- Librairies spécifiques au projet ---
+mega.py>=1.0.8  # Respect de votre contrainte
