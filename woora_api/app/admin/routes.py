@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request, current_app
+from sqlalchemy.orm import selectinload
 from app.models import (
     User, Property, PropertyType, PropertyAttribute, AttributeOption,
     PropertyAttributeScope, db, AppSetting, ServiceFee, VisitRequest,
@@ -12,6 +13,7 @@ import os
 import uuid
 from decimal import Decimal
 from app.utils.email_utils import send_admin_rejection_notification, send_admin_confirmation_to_owner, send_admin_response_to_seeker
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -117,20 +119,42 @@ def update_property_type_scopes(property_type_id):
     return jsonify({'message': 'Scopes mis à jour.'}), 200
 
 @admin_bp.route('/property_types_with_attributes', methods=['GET'])
+@jwt_required() # C'est une route admin, elle doit être protégée
 def get_property_types_with_attributes():
-    pts = PropertyType.query.all()
+    """
+    Récupère TOUS les types de biens et leurs attributs/options.
+    
+    Version OPTIMISÉE pour pré-charger toutes les données nécessaires
+    et éviter les timeouts dus au problème de "N+1 queries".
+    """
+    # Optionnel: Vérification du rôle admin si le décorateur ne suffit pas
+    # current_user_id = get_jwt_identity()
+    # admin = User.query.get(current_user_id)
+    # if not admin or admin.role != 'admin':
+    #     return jsonify({'message': "Accès non autorisé."}), 403
+
+    # Étape 1: Construire une seule requête qui charge tout en avance.
+    # C'est la clé de la performance.
+    property_types = PropertyType.query.options(
+        selectinload(PropertyType.attribute_scopes)
+            .selectinload(PropertyAttributeScope.attribute)
+                .selectinload(PropertyAttribute.options)
+    ).all() # On ne filtre pas par is_active pour l'admin
+
+    # Étape 2: Construire la réponse JSON à partir des données déjà en mémoire.
+    # Ces boucles sont maintenant ultra-rapides.
     result = []
-    for pt in pts:
-        d = pt.to_dict()
-        aids = [s.attribute_id for s in PropertyAttributeScope.query.filter_by(property_type_id=pt.id).all()]
-        attrs = PropertyAttribute.query.filter(PropertyAttribute.id.in_(aids)).all()
-        d['attributes'] = []
-        for a in attrs:
-            ad = a.to_dict()
-            if a.data_type == 'enum':
-                ad['options'] = [o.to_dict() for o in AttributeOption.query.filter_by(attribute_id=a.id)]
-            d['attributes'].append(ad)
-        result.append(d)
+    for pt in property_types:
+        pt_dict = pt.to_dict()
+        pt_dict['attributes'] = []
+        
+        for scope in pt.attribute_scopes:
+            attribute = scope.attribute
+            attr_dict = attribute.to_dict() # Les options sont déjà chargées
+            pt_dict['attributes'].append(attr_dict)
+            
+        result.append(pt_dict)
+        
     return jsonify(result)
 
 # ------------- UPLOAD -------------
@@ -516,4 +540,5 @@ def delete_property_attribute(attribute_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la suppression de l'attribut: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
 
