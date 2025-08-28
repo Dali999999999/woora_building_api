@@ -5,6 +5,7 @@ from app import db
 from app.models import Property, PropertyImage, User, PropertyType, VisitRequest,  PropertyAttributeScope, PropertyAttribute, AttributeOption
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.orm import selectinload
 from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
 from app.utils.mega_utils import get_mega_instance
 from werkzeug.utils import secure_filename
@@ -474,26 +475,44 @@ def reject_visit_request_by_owner(request_id):
 @owners_bp.route('/property_types_with_attributes', methods=['GET'])
 @jwt_required()
 def get_property_types_for_owner():
+    """
+    Récupère les types de biens avec leurs attributs et options associés.
+    
+    Cette version est OPTIMISÉE pour éviter le problème de "N+1 queries"
+    qui causait des timeouts, en pré-chargeant toutes les données nécessaires.
+    """
     # On vérifie que c'est bien un propriétaire
     current_user_id = get_jwt_identity()
     owner = User.query.get(current_user_id)
     if not owner or owner.role != 'owner':
         return jsonify({'message': "Accès non autorisé."}), 403
 
-    # Copie de la logique de la route admin
-    pts = PropertyType.query.filter_by(is_active=True).all()
+    # Étape 1: On construit une seule requête complexe qui dit à SQLAlchemy
+    # de pré-charger (eager load) toutes les relations dont nous aurons besoin.
+    # Ceci remplace de multiples requêtes dans des boucles par 2 ou 3 requêtes au total.
+    property_types = PropertyType.query.options(
+        selectinload(PropertyType.attribute_scopes)  # Pré-charger les tables de liaison
+            .selectinload(PropertyAttributeScope.attribute)  # Depuis la liaison, pré-charger l'attribut
+                .selectinload(PropertyAttribute.options)      # Depuis l'attribut, pré-charger ses options
+    ).filter(PropertyType.is_active == True).all()
+
+    # Étape 2: On construit la réponse JSON. Toutes les données sont déjà en mémoire,
+    # donc ces boucles sont extrêmement rapides et ne contactent plus la base de données.
     result = []
-    for pt in pts:
-        d = pt.to_dict()
-        aids = [s.attribute_id for s in PropertyAttributeScope.query.filter_by(property_type_id=pt.id).all()]
-        attrs = PropertyAttribute.query.filter(PropertyAttribute.id.in_(aids)).all()
-        d['attributes'] = []
-        for a in attrs:
-            ad = a.to_dict()
-            if a.data_type == 'enum':
-                ad['options'] = [o.to_dict() for o in AttributeOption.query.filter_by(attribute_id=a.id)]
-            d['attributes'].append(ad)
-        result.append(d)
+    for pt in property_types:
+        pt_dict = pt.to_dict()
+        pt_dict['attributes'] = []
+        
+        # On parcourt les scopes qui ont été pré-chargés
+        for scope in pt.attribute_scopes:
+            attribute = scope.attribute
+            # Le .to_dict() de l'attribut utilisera les options déjà pré-chargées,
+            # sans faire de nouvelle requête.
+            attr_dict = attribute.to_dict()
+            pt_dict['attributes'].append(attr_dict)
+            
+        result.append(pt_dict)
+        
     return jsonify(result)
 
 @owners_bp.route('/upload_image', methods=['POST'])
@@ -526,4 +545,5 @@ def upload_image_for_owner():
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
 
