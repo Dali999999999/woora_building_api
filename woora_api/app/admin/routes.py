@@ -463,51 +463,57 @@ def respond_to_property_request(request_id):
 # @jwt_required() et @admin_required # N'oubliez pas d'activer la sécurité
 def update_property_attribute(attribute_id):
     """
-    met à jour les détails d'un attribut de propriété existant.
-    la modification du nom ou du type de données est restreinte si l'attribut est déjà utilisé.
+    Met à jour un attribut de bien existant.
+    Cette version est sécurisée et performante.
     """
+    # 1. Récupérer l'attribut ou retourner une erreur 404
     attr = PropertyAttribute.query.get_or_404(attribute_id)
     data = request.get_json()
     if not data:
-        return jsonify({'message': 'données manquantes.'}), 400
+        return jsonify({'message': 'Données manquantes.'}), 400
 
-    # --- vérification d'usage pour les modifications critiques ---
-    is_attribute_in_use = False
-    if 'name' in data or 'data_type' in data:
-        properties_using_attribute = Property.query.filter(property.attributes.isnot(none)).all()
-        for prop in properties_using_attribute:
-            if isinstance(prop.attributes, dict) and attr.name in prop.attributes:
-                is_attribute_in_use = true
-                break
-    # --- fin de la vérification ---
+    new_name = data.get('name', '').strip()
+    new_data_type = data.get('data_type')
 
-    # mettre à jour le nom
-    if 'name' in data and data['name'] != attr.name:
-        if is_attribute_in_use:
-            return jsonify({'message': f"impossible de renommer l'attribut '{attr.name}' car il est déjà utilisé par des biens immobiliers."}), 409
-        if propertyattribute.query.filter_by(name=data['name']).first():
-            return jsonify({'message': 'ce nom d\'attribut est déjà utilisé.'}), 409
-        attr.name = data['name']
+    # 2. Vérification de sécurité : si on change le type de données
+    # La manière EFFICACE de vérifier si un attribut est utilisé est de
+    # regarder s'il est lié à un PropertyType, pas de scanner tous les biens.
+    if new_data_type and new_data_type != attr.data_type:
+        is_in_use = PropertyAttributeScope.query.filter_by(attribute_id=attr.id).first()
+        if is_in_use:
+            return jsonify({
+                'message': f"Impossible de changer le type de l'attribut '{attr.name}' car il est déjà associé à un type de bien."
+            }), 409 # 409 Conflict
 
-    # mettre à jour le type de données
-    if 'data_type' in data and data['data_type'] != attr.data_type:
-        if is_attribute_in_use:
-            return jsonify({'message': f"impossible de changer le type de l'attribut '{attr.name}' car il est déjà utilisé."}), 409
-        if attr.data_type == 'enum' and data['data_type'] != 'enum':
-            attributeoption.query.filter_by(attribute_id=attr.id).delete()
-        attr.data_type = data['data_type']
-        
-    # mettre à jour l'état "filtrable" (toujours autorisé)
+    # 3. Validation : si on change le nom, s'assurer qu'il n'est pas déjà pris
+    if new_name and new_name != attr.name:
+        existing_attr = PropertyAttribute.query.filter(
+            PropertyAttribute.name == new_name,
+            PropertyAttribute.id != attribute_id
+        ).first()
+        if existing_attr:
+            return jsonify({'message': f"Ce nom d'attribut '{new_name}' est déjà utilisé."}), 409
+        attr.name = new_name
+
+    # 4. Mise à jour des champs
+    if new_data_type:
+        # Si on change un type 'enum' pour autre chose, on supprime ses options
+        if attr.data_type == 'enum' and new_data_type != 'enum':
+            AttributeOption.query.filter_by(attribute_id=attr.id).delete()
+        attr.data_type = new_data_type
+
+    # La mise à jour de 'is_filterable' est toujours autorisée
     if 'is_filterable' in data:
         attr.is_filterable = data['is_filterable']
 
+    # 5. Sauvegarder les changements
     try:
         db.session.commit()
-        return jsonify({'message': 'attribut mis à jour avec succès.', 'attribute': attr.to_dict()}), 200
-    except exception as e:
+        return jsonify({'message': 'Attribut mis à jour avec succès.', 'attribute': attr.to_dict()}), 200
+    except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"erreur lors de la mise à jour de l'attribut: {e}", exc_info=true)
-        return jsonify({'message': 'erreur interne du serveur.'}), 500
+        current_app.logger.error(f"Erreur lors de la mise à jour de l'attribut: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
 
 
 @admin_bp.route('/property_attributes/<int:attribute_id>', methods=['DELETE'])
@@ -540,6 +546,7 @@ def delete_property_attribute(attribute_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la suppression de l'attribut: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
 
 
 
