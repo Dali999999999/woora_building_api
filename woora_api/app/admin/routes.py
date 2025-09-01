@@ -466,7 +466,7 @@ def update_property_attribute(attribute_id):
     met à jour les détails d'un attribut de propriété existant.
     la modification du nom ou du type de données est restreinte si l'attribut est déjà utilisé.
     """
-    attr = propertyattribute.query.get_or_404(attribute_id)
+    attr = PropertyAttribute.query.get_or_404(attribute_id)
     data = request.get_json()
     if not data:
         return jsonify({'message': 'données manquantes.'}), 400
@@ -540,5 +540,6 @@ def delete_property_attribute(attribute_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la suppression de l'attribut: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
 
 
