@@ -474,7 +474,7 @@ def update_property_attribute(attribute_id):
     # --- vérification d'usage pour les modifications critiques ---
     is_attribute_in_use = False
     if 'name' in data or 'data_type' in data:
-        properties_using_attribute = property.query.filter(property.attributes.isnot(none)).all()
+        properties_using_attribute = Property.query.filter(property.attributes.isnot(none)).all()
         for prop in properties_using_attribute:
             if isinstance(prop.attributes, dict) and attr.name in prop.attributes:
                 is_attribute_in_use = true
@@ -540,6 +540,7 @@ def delete_property_attribute(attribute_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la suppression de l'attribut: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
 
 
 
