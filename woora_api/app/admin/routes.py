@@ -472,7 +472,7 @@ def update_property_attribute(attribute_id):
         return jsonify({'message': 'données manquantes.'}), 400
 
     # --- vérification d'usage pour les modifications critiques ---
-    is_attribute_in_use = false
+    is_attribute_in_use = False
     if 'name' in data or 'data_type' in data:
         properties_using_attribute = property.query.filter(property.attributes.isnot(none)).all()
         for prop in properties_using_attribute:
@@ -540,6 +540,7 @@ def delete_property_attribute(attribute_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la suppression de l'attribut: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
 
 
 
