@@ -728,111 +728,119 @@ UPLOAD_FOLDER = '/tmp' # Définir le dossier d'upload
 
 @agents_bp.route('/properties', methods=['POST'])
 @jwt_required()
-def create_property_for_client():
+def create_property_for_agent():
     """
-    Permet à un agent immobilier de créer un bien immobilier pour le compte d'un propriétaire.
-    L'agent spécifie l'email du propriétaire dans les données.
+    Permet à un agent immobilier de créer un bien immobilier pour lui-même.
+    Identique au système des propriétaires mais pour les agents.
     """
     current_app.logger.debug("Requête POST /agents/properties reçue.")
     current_user_id = get_jwt_identity()
     current_app.logger.debug(f"Agent authentifié ID: {current_user_id}")
 
     data = request.get_json()
+    import logging
+    logging.getLogger().setLevel(logging.DEBUG)
+    logging.debug("🔍 Payload reçu : %s", data)
     current_app.logger.debug(f"JSON brut reçu: {data}")
 
-    # Vérifier que l'utilisateur est bien un agent
-    agent = User.query.get(current_user_id)
-    if not agent or agent.role != 'agent':
-        current_app.logger.warning(f"Accès non autorisé pour l'utilisateur {current_user_id} avec le rôle {agent.role if agent else 'N/A'}.")
-        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent créer des biens pour leurs clients."}), 403
-
-    # Vérifier les champs requis au niveau supérieur
-    required_top_level_fields = ['owner_email', 'image_urls', 'attributes']
+    required_top_level_fields = ['image_urls', 'attributes']
     for field in required_top_level_fields:
         if field not in data:
             current_app.logger.warning(f"Champ de niveau supérieur manquant: {field}")
             return jsonify({'message': f"Le champ {field} est requis au niveau supérieur."}), 400
 
-    # Récupérer l'email du propriétaire
-    owner_email = data.get('owner_email')
-    if not owner_email or not isinstance(owner_email, str):
-        return jsonify({'message': "owner_email est requis et doit être une chaîne de caractères valide."}), 400
-
-    # Chercher le propriétaire par email
-    owner = User.query.filter_by(email=owner_email).first()
-    if not owner:
-        return jsonify({'message': f"Aucun utilisateur trouvé avec l'email: {owner_email}"}), 404
-
-    # Vérifier que c'est bien un propriétaire
-    if owner.role != 'owner':
-        return jsonify({'message': f"L'utilisateur {owner_email} n'est pas un propriétaire."}), 400
-
     dynamic_attributes = data.get('attributes', {})
     current_app.logger.debug(f"Attributs dynamiques extraits: {dynamic_attributes}")
 
-    # Validation des champs (même logique que pour les propriétaires)
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        current_app.logger.warning(f"Accès non autorisé pour l'utilisateur {current_user_id} avec le rôle {agent.role if agent else 'N/A'}.")
+        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent créer des biens."}), 403
+
     property_type_id = dynamic_attributes.get('property_type_id')
+    current_app.logger.debug(f"property_type_id brut: {property_type_id}, type: {type(property_type_id)}")
     try:
         property_type_id = int(property_type_id)
+        current_app.logger.debug(f"property_type_id converti: {property_type_id}, type: {type(property_type_id)}")
     except (ValueError, TypeError):
+        current_app.logger.warning(f"Validation échouée: property_type_id doit être un entier valide. Reçu: {property_type_id}")
         return jsonify({'message': "property_type_id doit être un entier valide."}), 400
 
     title = dynamic_attributes.get('title')
+    current_app.logger.debug(f"title brut: {title}, type: {type(title)}")
     if not isinstance(title, str) or not title:
+        current_app.logger.warning(f"Validation échouée: title est requis et doit être une chaîne de caractères non vide. Reçu: {title}")
         return jsonify({'message': "title est requis et doit être une chaîne de caractères non vide."}), 400
 
     price = dynamic_attributes.get('price')
+    current_app.logger.debug(f"price brut: {price}, type: {type(price)}")
     try:
         price = float(price)
+        current_app.logger.debug(f"price converti: {price}, type: {type(price)}")
     except (ValueError, TypeError):
+        current_app.logger.warning(f"Validation échouée: price doit être un nombre décimal valide. Reçu: {price}")
         return jsonify({'message': "price doit être un nombre décimal valide."}), 400
 
     status = dynamic_attributes.get('status')
+    current_app.logger.debug(f"status brut: {status}, type: {type(status)}")
     allowed_statuses = ['for_sale', 'for_rent', 'sold', 'rented']
     if status not in allowed_statuses:
+        current_app.logger.warning(f"Validation échouée: status invalide. Reçu: {status}")
         return jsonify({'message': f"status invalide. Doit être l'une des valeurs suivantes: {', '.join(allowed_statuses)}."}), 400
 
-    # Validation optionnelle des autres champs
     description = dynamic_attributes.get('description')
+    current_app.logger.debug(f"description brut: {description}, type: {type(description)}")
     if description is not None and not isinstance(description, str):
+        current_app.logger.warning(f"Validation échouée: description doit être une chaîne de caractères. Reçu: {description}")
         return jsonify({'message': "description doit être une chaîne de caractères."}), 400
 
     address = dynamic_attributes.get('address')
+    current_app.logger.debug(f"address brut: {address}, type: {type(address)}")
     if address is not None and not isinstance(address, str):
+        current_app.logger.warning(f"Validation échouée: address doit être une chaîne de caractères. Reçu: {address}")
         return jsonify({'message': "address doit être une chaîne de caractères."}), 400
 
     city = dynamic_attributes.get('city')
+    current_app.logger.debug(f"city brut: {city}, type: {type(city)}")
     if city is not None and not isinstance(city, str):
+        current_app.logger.warning(f"Validation échouée: city doit être une chaîne de caractères. Reçu: {city}")
         return jsonify({'message': "city doit être une chaîne de caractères."}), 400
 
     postal_code = dynamic_attributes.get('postal_code')
+    current_app.logger.debug(f"postal_code brut: {postal_code}, type: {type(postal_code)}")
     if postal_code is not None and not isinstance(postal_code, str):
+        current_app.logger.warning(f"Validation échouée: postal_code doit être une chaîne de caractères. Reçu: {postal_code}")
         return jsonify({'message': "postal_code doit être une chaîne de caractères."}), 400
 
-    # Validation des coordonnées GPS
     latitude = None
     if 'latitude' in dynamic_attributes and dynamic_attributes['latitude'] is not None:
+        current_app.logger.debug(f"latitude brut: {dynamic_attributes['latitude']}, type: {type(dynamic_attributes['latitude'])}")
         try:
             latitude = float(dynamic_attributes['latitude'])
+            current_app.logger.debug(f"latitude converti: {latitude}, type: {type(latitude)}")
         except (ValueError, TypeError):
+            current_app.logger.warning(f"Validation échouée: latitude doit être un nombre décimal valide. Reçu: {dynamic_attributes['latitude']}")
             return jsonify({'message': "latitude doit être un nombre décimal valide."}), 400
 
     longitude = None
     if 'longitude' in dynamic_attributes and dynamic_attributes['longitude'] is not None:
+        current_app.logger.debug(f"longitude brut: {dynamic_attributes['longitude']}, type: {type(dynamic_attributes['longitude'])}")
         try:
             longitude = float(dynamic_attributes['longitude'])
+            current_app.logger.debug(f"longitude converti: {longitude}, type: {type(longitude)}")
         except (ValueError, TypeError):
+            current_app.logger.warning(f"Validation échouée: longitude doit être un nombre décimal valide. Reçu: {dynamic_attributes['longitude']}")
             return jsonify({'message': "longitude doit être un nombre décimal valide."}), 400
 
-    # Vérifier que le type de propriété existe
     property_type = PropertyType.query.get(property_type_id)
     if not property_type:
+        current_app.logger.warning(f"Validation échouée: Type de propriété invalide ou non trouvé. ID: {property_type_id}")
         return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
 
-    # Créer la nouvelle propriété avec l'agent_id
+    # L'agent crée un bien pour lui-même, donc owner_id = agent_id = current_user_id
     new_property = Property(
-        owner_id=owner.id,  # Le propriétaire réel
-        agent_id=current_user_id,  # L'agent qui crée le bien
+        owner_id=current_user_id,  # L'agent est le propriétaire
+        agent_id=current_user_id,  # L'agent est aussi celui qui a créé le bien
         property_type_id=property_type_id,
         title=title,
         description=description,
@@ -846,13 +854,12 @@ def create_property_for_client():
         attributes=dynamic_attributes,
         is_validated=False
     )
-    current_app.logger.debug(f"Nouvelle propriété créée par l'agent (avant commit): {new_property}")
+    current_app.logger.debug(f"Nouvelle propriété créée (avant commit): {new_property}")
 
     db.session.add(new_property)
     db.session.flush()
     current_app.logger.debug(f"ID de la nouvelle propriété après flush: {new_property.id}")
 
-    # Gestion des images
     image_urls = data.get('image_urls', [])
     current_app.logger.debug(f"URLs d'images à enregistrer: {image_urls}")
     if image_urls:
@@ -867,22 +874,11 @@ def create_property_for_client():
 
     try:
         db.session.commit()
-        current_app.logger.info("Bien immobilier créé avec succès par l'agent et commité.")
-        property_dict = new_property.to_dict()
-        property_dict['agent_info'] = {
-            'agent_id': agent.id,
-            'agent_name': f"{agent.first_name} {agent.last_name}",
-            'agent_email': agent.email
-        }
-        property_dict['owner_info'] = {
-            'owner_id': owner.id,
-            'owner_name': f"{owner.first_name} {owner.last_name}",
-            'owner_email': owner.email
-        }
-        return jsonify({'message': "Bien immobilier créé avec succès pour le client.", 'property': property_dict}), 201
+        current_app.logger.info("Bien immobilier créé avec succès et commité.")
+        return jsonify({'message': "Bien immobilier créé avec succès.", 'property': new_property.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erreur lors de la création du bien immobilier par l'agent (rollback): {e}", exc_info=True)
+        current_app.logger.error(f"Erreur lors de la création du bien immobilier (rollback): {e}", exc_info=True)
         return jsonify({'message': "Erreur lors de la création du bien immobilier.", 'error': str(e)}), 500
 
 @agents_bp.route('/my-properties', methods=['GET'])
