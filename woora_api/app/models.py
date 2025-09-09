@@ -131,6 +131,7 @@ class Property(db.Model):
     __tablename__ = 'Properties'
     id = db.Column(db.Integer, primary_key=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
+    agent_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True)  # Agent qui a ajouté le bien
     property_type_id = db.Column(db.Integer, db.ForeignKey('PropertyTypes.id', ondelete='RESTRICT'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
@@ -146,7 +147,8 @@ class Property(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    owner = db.relationship('User', back_populates='properties')
+    owner = db.relationship('User', back_populates='properties', foreign_keys=[owner_id])
+    agent = db.relationship('User', foreign_keys=[agent_id])  # Agent qui a créé le bien
     property_type = db.relationship('PropertyType', back_populates='properties')
 
     # Relations avec suppression en cascade
@@ -158,7 +160,7 @@ class Property(db.Model):
 
     def to_dict(self):
         base_data = {
-            'id': self.id, 'owner_id': self.owner_id, 'property_type_id': self.property_type_id,
+            'id': self.id, 'owner_id': self.owner_id, 'agent_id': self.agent_id, 'property_type_id': self.property_type_id,
             'title': self.title, 'description': self.description, 'status': self.status,
             'price': float(self.price) if self.price is not None else None,
             'address': self.address, 'city': self.city, 'postal_code': self.postal_code,
@@ -172,6 +174,15 @@ class Property(db.Model):
         base_data['attributes'] = attributes_dict
         base_data['image_urls'] = [image.image_url for image in self.images]
         base_data['property_type'] = {'id': self.property_type.id, 'name': self.property_type.name} if self.property_type else None
+        
+        # Ajouter les informations de l'agent si le bien a été créé par un agent
+        if self.agent:
+            base_data['created_by_agent'] = {
+                'agent_id': self.agent.id,
+                'agent_name': f"{self.agent.first_name} {self.agent.last_name}",
+                'agent_email': self.agent.email
+            }
+        
         return base_data
 
 class PropertyImage(db.Model):

@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, current_app, request
-from app.models import Property, User, Referral, Commission, PropertyType, PropertyAttributeScope, PropertyAttribute, AttributeOption
+from app.models import Property, User, Referral, Commission, PropertyType, PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyImage
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.utils.helpers import generate_unique_referral_code
 from app import db
@@ -9,6 +9,11 @@ from sqlalchemy import func
 from app.models import PayoutRequest, Transaction
 from datetime import datetime
 import json
+from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.orm import selectinload
+from app.utils.mega_utils import get_mega_instance
+from werkzeug.utils import secure_filename
+import uuid
 
 # On crée un nouveau "blueprint" spécifiquement pour les agents
 agents_bp = Blueprint('agents', __name__, url_prefix='/agents')
@@ -697,3 +702,412 @@ def request_withdrawal():
         db.session.rollback()
         current_app.logger.error(f"Erreur interne lors de la demande de virement: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+# ==============================================================================
+# NOUVELLES ROUTES POUR PERMETTRE AUX AGENTS D'AJOUTER DES BIENS IMMOBILIERS
+# ==============================================================================
+
+UPLOAD_FOLDER = '/tmp' # Définir le dossier d'upload
+
+@agents_bp.route('/properties', methods=['POST'])
+@jwt_required()
+def create_property_for_client():
+    """
+    Permet à un agent immobilier de créer un bien immobilier pour le compte d'un propriétaire.
+    L'agent spécifie l'email du propriétaire dans les données.
+    """
+    current_app.logger.debug("Requête POST /agents/properties reçue.")
+    current_user_id = get_jwt_identity()
+    current_app.logger.debug(f"Agent authentifié ID: {current_user_id}")
+
+    data = request.get_json()
+    current_app.logger.debug(f"JSON brut reçu: {data}")
+
+    # Vérifier que l'utilisateur est bien un agent
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        current_app.logger.warning(f"Accès non autorisé pour l'utilisateur {current_user_id} avec le rôle {agent.role if agent else 'N/A'}.")
+        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent créer des biens pour leurs clients."}), 403
+
+    # Vérifier les champs requis au niveau supérieur
+    required_top_level_fields = ['owner_email', 'image_urls', 'attributes']
+    for field in required_top_level_fields:
+        if field not in data:
+            current_app.logger.warning(f"Champ de niveau supérieur manquant: {field}")
+            return jsonify({'message': f"Le champ {field} est requis au niveau supérieur."}), 400
+
+    # Récupérer l'email du propriétaire
+    owner_email = data.get('owner_email')
+    if not owner_email or not isinstance(owner_email, str):
+        return jsonify({'message': "owner_email est requis et doit être une chaîne de caractères valide."}), 400
+
+    # Chercher le propriétaire par email
+    owner = User.query.filter_by(email=owner_email).first()
+    if not owner:
+        return jsonify({'message': f"Aucun utilisateur trouvé avec l'email: {owner_email}"}), 404
+
+    # Vérifier que c'est bien un propriétaire
+    if owner.role != 'owner':
+        return jsonify({'message': f"L'utilisateur {owner_email} n'est pas un propriétaire."}), 400
+
+    dynamic_attributes = data.get('attributes', {})
+    current_app.logger.debug(f"Attributs dynamiques extraits: {dynamic_attributes}")
+
+    # Validation des champs (même logique que pour les propriétaires)
+    property_type_id = dynamic_attributes.get('property_type_id')
+    try:
+        property_type_id = int(property_type_id)
+    except (ValueError, TypeError):
+        return jsonify({'message': "property_type_id doit être un entier valide."}), 400
+
+    title = dynamic_attributes.get('title')
+    if not isinstance(title, str) or not title:
+        return jsonify({'message': "title est requis et doit être une chaîne de caractères non vide."}), 400
+
+    price = dynamic_attributes.get('price')
+    try:
+        price = float(price)
+    except (ValueError, TypeError):
+        return jsonify({'message': "price doit être un nombre décimal valide."}), 400
+
+    status = dynamic_attributes.get('status')
+    allowed_statuses = ['for_sale', 'for_rent', 'sold', 'rented']
+    if status not in allowed_statuses:
+        return jsonify({'message': f"status invalide. Doit être l'une des valeurs suivantes: {', '.join(allowed_statuses)}."}), 400
+
+    # Validation optionnelle des autres champs
+    description = dynamic_attributes.get('description')
+    if description is not None and not isinstance(description, str):
+        return jsonify({'message': "description doit être une chaîne de caractères."}), 400
+
+    address = dynamic_attributes.get('address')
+    if address is not None and not isinstance(address, str):
+        return jsonify({'message': "address doit être une chaîne de caractères."}), 400
+
+    city = dynamic_attributes.get('city')
+    if city is not None and not isinstance(city, str):
+        return jsonify({'message': "city doit être une chaîne de caractères."}), 400
+
+    postal_code = dynamic_attributes.get('postal_code')
+    if postal_code is not None and not isinstance(postal_code, str):
+        return jsonify({'message': "postal_code doit être une chaîne de caractères."}), 400
+
+    # Validation des coordonnées GPS
+    latitude = None
+    if 'latitude' in dynamic_attributes and dynamic_attributes['latitude'] is not None:
+        try:
+            latitude = float(dynamic_attributes['latitude'])
+        except (ValueError, TypeError):
+            return jsonify({'message': "latitude doit être un nombre décimal valide."}), 400
+
+    longitude = None
+    if 'longitude' in dynamic_attributes and dynamic_attributes['longitude'] is not None:
+        try:
+            longitude = float(dynamic_attributes['longitude'])
+        except (ValueError, TypeError):
+            return jsonify({'message': "longitude doit être un nombre décimal valide."}), 400
+
+    # Vérifier que le type de propriété existe
+    property_type = PropertyType.query.get(property_type_id)
+    if not property_type:
+        return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
+
+    # Créer la nouvelle propriété avec l'agent_id
+    new_property = Property(
+        owner_id=owner.id,  # Le propriétaire réel
+        agent_id=current_user_id,  # L'agent qui crée le bien
+        property_type_id=property_type_id,
+        title=title,
+        description=description,
+        status=status,
+        price=price,
+        address=address,
+        city=city,
+        postal_code=postal_code,
+        latitude=latitude,
+        longitude=longitude,
+        attributes=dynamic_attributes,
+        is_validated=False
+    )
+    current_app.logger.debug(f"Nouvelle propriété créée par l'agent (avant commit): {new_property}")
+
+    db.session.add(new_property)
+    db.session.flush()
+    current_app.logger.debug(f"ID de la nouvelle propriété après flush: {new_property.id}")
+
+    # Gestion des images
+    image_urls = data.get('image_urls', [])
+    current_app.logger.debug(f"URLs d'images à enregistrer: {image_urls}")
+    if image_urls:
+        for i, image_url in enumerate(image_urls):
+            new_image = PropertyImage(
+                property_id=new_property.id,
+                image_url=image_url,
+                display_order=i
+            )
+            db.session.add(new_image)
+            current_app.logger.debug(f"Image ajoutée: {image_url}")
+
+    try:
+        db.session.commit()
+        current_app.logger.info("Bien immobilier créé avec succès par l'agent et commité.")
+        property_dict = new_property.to_dict()
+        property_dict['agent_info'] = {
+            'agent_id': agent.id,
+            'agent_name': f"{agent.first_name} {agent.last_name}",
+            'agent_email': agent.email
+        }
+        property_dict['owner_info'] = {
+            'owner_id': owner.id,
+            'owner_name': f"{owner.first_name} {owner.last_name}",
+            'owner_email': owner.email
+        }
+        return jsonify({'message': "Bien immobilier créé avec succès pour le client.", 'property': property_dict}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la création du bien immobilier par l'agent (rollback): {e}", exc_info=True)
+        return jsonify({'message': "Erreur lors de la création du bien immobilier.", 'error': str(e)}), 500
+
+@agents_bp.route('/my-properties', methods=['GET'])
+@jwt_required()
+def get_agent_created_properties():
+    """
+    Récupère tous les biens immobiliers créés par cet agent.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent voir leurs biens créés."}), 403
+
+    # Récupérer toutes les propriétés créées par cet agent
+    properties = Property.query.filter_by(agent_id=current_user_id).all()
+    
+    properties_with_details = []
+    for prop in properties:
+        property_dict = prop.to_dict()
+        property_dict['image_urls'] = [image.image_url for image in prop.images]
+        
+        # Ajouter les informations sur le propriétaire
+        if prop.owner:
+            property_dict['owner_info'] = {
+                'owner_id': prop.owner.id,
+                'owner_name': f"{prop.owner.first_name} {prop.owner.last_name}",
+                'owner_email': prop.owner.email
+            }
+        
+        properties_with_details.append(property_dict)
+
+    return jsonify({
+        'message': f"Trouvé {len(properties_with_details)} bien(s) créé(s) par cet agent.",
+        'properties': properties_with_details
+    }), 200
+
+@agents_bp.route('/property_types_with_attributes', methods=['GET'])
+@jwt_required()
+def get_property_types_for_agent():
+    """
+    Récupère les types de biens avec leurs attributs et options associés pour les agents.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    # Même logique que pour les propriétaires
+    property_types = PropertyType.query.options(
+        selectinload(PropertyType.attribute_scopes)
+            .selectinload(PropertyAttributeScope.attribute)
+                .selectinload(PropertyAttribute.options)
+    ).filter(PropertyType.is_active == True).all()
+
+    result = []
+    for pt in property_types:
+        pt_dict = pt.to_dict()
+        pt_dict['attributes'] = []
+        
+        for scope in pt.attribute_scopes:
+            attribute = scope.attribute
+            attr_dict = attribute.to_dict()
+            pt_dict['attributes'].append(attr_dict)
+            
+        result.append(pt_dict)
+        
+    return jsonify(result)
+
+@agents_bp.route('/upload_image', methods=['POST'])
+@jwt_required()
+def upload_image_for_agent():
+    """
+    Permet aux agents d'uploader des images pour les biens immobiliers.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    # Même logique que pour les propriétaires et admin
+    if 'file' not in request.files:
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nom de fichier vide'}), 400
+    filename = secure_filename(file.filename)
+    tmp_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
+    try:
+        file.save(tmp_path)
+        mega = get_mega_instance()
+        if not mega:
+            return jsonify({'error': 'Connexion stockage impossible'}), 503
+        node = mega.upload(tmp_path)
+        link = mega.get_upload_link(node)
+        return jsonify({'url': link}), 200
+    except Exception as e:
+        current_app.logger.error(f"Upload error: {e}")
+        return jsonify({'error': 'Erreur interne'}), 500
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+@agents_bp.route('/properties/<int:property_id>', methods=['PUT'])
+@jwt_required()
+def update_agent_created_property(property_id):
+    """
+    Permet à un agent de modifier un bien immobilier qu'il a créé.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent modifier leurs biens créés."}), 403
+
+    # Vérifier que le bien existe et a été créé par cet agent
+    property = Property.query.filter_by(id=property_id, agent_id=current_user_id).first()
+    if not property:
+        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas l'agent créateur."}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': "Corps de la requête manquant ou invalide."}), 400
+        
+    current_app.logger.debug(f"Données reçues pour la mise à jour du bien {property_id} par l'agent: {data}")
+
+    attributes_data = data.get('attributes')
+    if attributes_data:
+        # Mise à jour des champs statiques (même logique que pour les propriétaires)
+        if 'title' in attributes_data:
+            property.title = attributes_data['title']
+        
+        if 'price' in attributes_data:
+            try:
+                property.price = float(attributes_data['price']) if attributes_data['price'] is not None else None
+            except (ValueError, TypeError):
+                return jsonify({'message': "Le prix doit être un nombre valide."}), 400
+        
+        if 'status' in attributes_data:
+            property.status = attributes_data['status']
+            
+        if 'description' in attributes_data:
+            property.description = attributes_data.get('description')
+            
+        if 'address' in attributes_data:
+            property.address = attributes_data.get('address')
+            
+        if 'city' in attributes_data:
+            property.city = attributes_data.get('city')
+            
+        if 'postal_code' in attributes_data:
+            property.postal_code = attributes_data.get('postal_code')
+            
+        # Gestion des coordonnées GPS
+        if 'latitude' in attributes_data:
+            lat_val = attributes_data.get('latitude')
+            try:
+                property.latitude = float(lat_val) if lat_val and str(lat_val).lower() != 'null' else None
+            except (ValueError, TypeError):
+                return jsonify({'message': 'latitude doit être un nombre décimal valide.'}), 400
+                
+        if 'longitude' in attributes_data:
+            lon_val = attributes_data.get('longitude')
+            try:
+                property.longitude = float(lon_val) if lon_val and str(lon_val).lower() != 'null' else None
+            except (ValueError, TypeError):
+                return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
+
+        # Mise à jour du champ JSON attributes
+        if property.attributes is None:
+            property.attributes = {}
+        
+        property.attributes.update(attributes_data)
+        flag_modified(property, "attributes")
+
+    # Gestion des images (même logique que pour les propriétaires)
+    if 'image_urls' in data:
+        PropertyImage.query.filter_by(property_id=property.id).delete()
+        db.session.flush()
+
+        image_urls = data.get('image_urls', [])
+        for i, image_url in enumerate(image_urls):
+            new_image = PropertyImage(
+                property_id=property.id,
+                image_url=image_url,
+                display_order=i
+            )
+            db.session.add(new_image)
+
+    try:
+        db.session.commit()
+        
+        updated_property_dict = property.to_dict()
+        
+        return jsonify({
+            'message': "Bien immobilier mis à jour avec succès par l'agent.",
+            'property': updated_property_dict
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la mise à jour du bien immobilier par l'agent (rollback): {e}", exc_info=True)
+        return jsonify({'message': "Erreur lors de la mise à jour du bien immobilier.", 'error': str(e)}), 500
+
+@agents_bp.route('/properties/<int:property_id>', methods=['DELETE'])
+@jwt_required()
+def delete_agent_created_property(property_id):
+    """
+    Permet à un agent de supprimer un bien immobilier qu'il a créé.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent supprimer leurs biens créés."}), 403
+
+    # Vérifier que le bien existe et a été créé par cet agent
+    property = Property.query.filter_by(id=property_id, agent_id=current_user_id).first()
+    if not property:
+        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas l'agent créateur."}), 404
+
+    try:
+        db.session.delete(property)
+        db.session.commit()
+        return jsonify({'message': "Bien immobilier supprimé avec succès par l'agent."}), 204
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la suppression du bien immobilier par l'agent (rollback): {e}", exc_info=True)
+        return jsonify({'message': "Erreur lors de la suppression du bien immobilier.", 'error': str(e)}), 500
+
+@agents_bp.route('/properties/<int:property_id>', methods=['GET'])
+@jwt_required()
+def get_agent_created_property_details(property_id):
+    """
+    Récupère les détails d'un bien immobilier créé par l'agent.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent voir les détails de leurs biens créés."}), 403
+
+    # Vérifier que le bien existe et a été créé par cet agent
+    property = Property.query.filter_by(id=property_id, agent_id=current_user_id).first()
+    if not property:
+        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas l'agent créateur."}), 404
+
+    property_dict = property.to_dict()
+    property_dict['image_urls'] = [img.image_url for img in property.images] 
+    return jsonify(property_dict), 200
