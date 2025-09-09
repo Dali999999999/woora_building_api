@@ -27,7 +27,8 @@ class User(db.Model):
     bio = db.Column(db.Text, nullable=True)
 
     # Relations (si un utilisateur est supprimé, toutes ses données associées le sont aussi)
-    properties = db.relationship('Property', back_populates='owner', cascade="all, delete-orphan")
+    properties = db.relationship('Property', back_populates='owner', foreign_keys='Property.owner_id', cascade="all, delete-orphan")
+    created_properties = db.relationship('Property', foreign_keys='Property.agent_id')
     property_attributes = db.relationship('PropertyAttribute', back_populates='user', cascade="all, delete-orphan")
     referrals = db.relationship('Referral', back_populates='agent', cascade="all, delete-orphan")
     visit_requests = db.relationship('VisitRequest', back_populates='customer', cascade="all, delete-orphan")
@@ -148,7 +149,7 @@ class Property(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     owner = db.relationship('User', back_populates='properties', foreign_keys=[owner_id])
-    agent = db.relationship('User', foreign_keys=[agent_id])  # Agent qui a créé le bien
+    agent = db.relationship('User', back_populates='created_properties', foreign_keys=[agent_id])
     property_type = db.relationship('PropertyType', back_populates='properties')
 
     # Relations avec suppression en cascade
