@@ -914,10 +914,8 @@ def get_agent_created_properties():
         
         properties_with_details.append(property_dict)
 
-    return jsonify({
-        'message': f"Trouvé {len(properties_with_details)} bien(s) créé(s) par cet agent.",
-        'properties': properties_with_details
-    }), 200
+    # Retourner directement la liste pour être cohérent avec les autres routes
+    return jsonify(properties_with_details), 200
 
 
 @agents_bp.route('/upload_image', methods=['POST'])
