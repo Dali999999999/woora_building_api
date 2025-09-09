@@ -902,37 +902,6 @@ def get_agent_created_properties():
         'properties': properties_with_details
     }), 200
 
-@agents_bp.route('/property_types_with_attributes', methods=['GET'])
-@jwt_required()
-def get_property_types_for_agent():
-    """
-    Récupère les types de biens avec leurs attributs et options associés pour les agents.
-    """
-    current_user_id = get_jwt_identity()
-    agent = User.query.get(current_user_id)
-    if not agent or agent.role != 'agent':
-        return jsonify({'message': "Accès non autorisé."}), 403
-
-    # Même logique que pour les propriétaires
-    property_types = PropertyType.query.options(
-        selectinload(PropertyType.attribute_scopes)
-            .selectinload(PropertyAttributeScope.attribute)
-                .selectinload(PropertyAttribute.options)
-    ).filter(PropertyType.is_active == True).all()
-
-    result = []
-    for pt in property_types:
-        pt_dict = pt.to_dict()
-        pt_dict['attributes'] = []
-        
-        for scope in pt.attribute_scopes:
-            attribute = scope.attribute
-            attr_dict = attribute.to_dict()
-            pt_dict['attributes'].append(attr_dict)
-            
-        result.append(pt_dict)
-        
-    return jsonify(result)
 
 @agents_bp.route('/upload_image', methods=['POST'])
 @jwt_required()
