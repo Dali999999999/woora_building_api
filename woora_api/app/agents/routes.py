@@ -188,25 +188,46 @@ def get_agent_commissions():
 
     return jsonify(response_data), 200
 
-# --- ROUTE OPTIMISÉE POUR LES AGENTS ET CLIENTS ---
+# --- ROUTE SIMPLE POUR LES TYPES DE PROPRIÉTÉS ---
 @agents_bp.route('/property_types_with_attributes', methods=['GET'])
 @jwt_required()
 def get_property_types_for_agent():
     """
-    Version optimisée qui utilise des JOINs au lieu de requêtes N+1.
+    Version optimisée avec selectinload pour éviter les requêtes N+1.
     """
-    get_jwt_identity()
+    try:
+        get_jwt_identity()
+        
+        # Version optimisée comme pour les propriétaires
+        property_types = PropertyType.query.options(
+            selectinload(PropertyType.attribute_scopes)
+                .selectinload(PropertyAttributeScope.attribute)
+                    .selectinload(PropertyAttribute.options)
+        ).filter(PropertyType.is_active == True).all()
 
-    # Version temporairement simplifiée pour éviter les timeouts
-    pts = PropertyType.query.filter_by(is_active=True).all()
-    result = []
-    
-    for pt in pts:
-        pt_dict = pt.to_dict()
-        pt_dict['attributes'] = []  # On peut remplir ça plus tard si nécessaire
-        result.append(pt_dict)
-    
-    return jsonify(result)
+        result = []
+        for pt in property_types:
+            pt_dict = pt.to_dict()
+            pt_dict['attributes'] = []
+            
+            for scope in pt.attribute_scopes:
+                attribute = scope.attribute
+                attr_dict = attribute.to_dict()
+                pt_dict['attributes'].append(attr_dict)
+                
+            result.append(pt_dict)
+            
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Erreur property types optimisée: {e}")
+        # Fallback simple en cas d'erreur
+        try:
+            pts = PropertyType.query.filter_by(is_active=True).all()
+            simple_result = [{'id': pt.id, 'name': pt.name, 'attributes': []} for pt in pts]
+            return jsonify(simple_result)
+        except:
+            return jsonify([]), 200
 
 # ===============================================
 # 2. ROUTES FLASK POUR LES VERSEMENTS
