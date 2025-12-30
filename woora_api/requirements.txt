@@ -11,6 +11,7 @@ gunicorn>=21.0.0,<22.0.0
 Flask-SQLAlchemy>=3.0.0,<3.1.0
 SQLAlchemy>=1.4.40,<2.0.0
 PyMySQL>=1.0.0,<1.1.0
+cryptography>=41.0.0,<42.0.0  # Requis pour l'authentification MySQL moderne (sha256_password)
 
 # --- Authentification et Sécurité ---
 Flask-JWT-Extended>=4.4.0,<4.5.0
