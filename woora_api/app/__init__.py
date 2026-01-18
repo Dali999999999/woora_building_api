@@ -23,10 +23,10 @@ def create_app():
     mail.init_app(app)
     jwt.init_app(app)
     CORS(app, resources={
-    r"/*": {
         "origins": [
             re.compile(r"http://localhost:[0-9]+"),
-            "https://woora-building-admin.vercel.app"
+            "https://woora-building-admin.vercel.app",
+            "https://panel.wooraentreprises.com"
         ],
         "supports_credentials": True,
         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
