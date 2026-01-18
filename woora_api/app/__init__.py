@@ -23,16 +23,17 @@ def create_app():
     mail.init_app(app)
     jwt.init_app(app)
     CORS(app, resources={
-        "origins": [
-            re.compile(r"http://localhost:[0-9]+"),
-            "https://woora-building-admin.vercel.app",
-            "https://panel.wooraentreprises.com"
-        ],
-        "supports_credentials": True,
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    }
-})
+        r"/*": {
+            "origins": [
+                re.compile(r"http://localhost:[0-9]+"),
+                "https://woora-building-admin.vercel.app",
+                "https://panel.wooraentreprises.com"
+            ],
+            "supports_credentials": True,
+            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        }
+    })
     # Gestionnaires d'erreurs JWT
     @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_payload):
