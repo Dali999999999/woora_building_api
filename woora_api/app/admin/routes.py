@@ -595,13 +595,30 @@ def update_property_attribute(attribute_id):
             }), 409 # 409 Conflict
 
     # 3. Validation : si on change le nom, s'assurer qu'il n'est pas déjà pris
+    # ET SURTOUT qu'il n'est pas déjà utilisé dans des données existantes (pour éviter de casser le JSON)
     if new_name and new_name != attr.name:
+        # Check nom unique
         existing_attr = PropertyAttribute.query.filter(
             PropertyAttribute.name == new_name,
             PropertyAttribute.id != attribute_id
         ).first()
         if existing_attr:
             return jsonify({'message': f"Ce nom d'attribut '{new_name}' est déjà utilisé."}), 409
+
+        # Check usage dans les propriétés (CRUCIAL)
+        # On cherche si une propriété a une clé qui correspond à l'ancien nom de l'attribut
+        # Note: La syntaxe exacte dépend de la DB (Postgres/MySQL). Ici on utilise une méthode générique Python
+        # car JSON_CONTAINS ou équivalent peut varier.
+        # Pour être sûr et compatible, on scanne les propriétés qui ont des attributs.
+        # (Optimisation possible: faire une requête SQL native spécifique si bcp de données)
+        
+        properties_using_attribute = Property.query.filter(Property.attributes.isnot(None)).all()
+        for prop in properties_using_attribute:
+             if isinstance(prop.attributes, dict) and attr.name in prop.attributes:
+                 return jsonify({
+                    'message': f"Impossible de renommer l'attribut '{attr.name}' car il est utilisé dans des biens existants (ex: ID {prop.id}). Supprimez-le et recréez-le si nécessaire, mais les données seront perdues."
+                }), 409
+        
         attr.name = new_name
 
     # 4. Mise à jour des champs
