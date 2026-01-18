@@ -7,7 +7,7 @@ from app.models import (
 )
 from app.schemas import VisitSettingsSchema
 from marshmallow import ValidationError
-from app.utils.mega_utils import get_mega_instance
+# from app.utils.mega_utils import get_mega_instance # REMOVED
 from werkzeug.utils import secure_filename
 import os
 import uuid
@@ -165,22 +165,20 @@ def upload_image():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'Nom de fichier vide'}), 400
-    filename = secure_filename(file.filename)
-    tmp_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
+
+    from app.utils.cloudinary_utils import upload_image # Tardif
+    
     try:
-        file.save(tmp_path)
-        mega = get_mega_instance()
-        if not mega:
-            return jsonify({'error': 'Connexion stockage impossible'}), 503
-        node = mega.upload(tmp_path)
-        link = mega.get_upload_link(node)
-        return jsonify({'url': link}), 200
+        secure_url = upload_image(file, folder="woora_admin_uploads")
+        
+        if secure_url:
+            return jsonify({'url': secure_url}), 200
+        else:
+             return jsonify({'error': 'Erreur interne Cloudinary'}), 500
+
     except Exception as e:
         current_app.logger.error(f"Upload error: {e}")
         return jsonify({'error': 'Erreur interne'}), 500
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 # ------------- SETTINGS -------------
 @admin_bp.route('/settings/visits', methods=['GET'])

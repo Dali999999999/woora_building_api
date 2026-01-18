@@ -7,7 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
 from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
-from app.utils.mega_utils import get_mega_instance
+# from app.utils.mega_utils import get_mega_instance # REMOVED: Migration Cloudinary
 from werkzeug.utils import secure_filename
 import os
 import uuid
@@ -523,27 +523,21 @@ def upload_image_for_owner():
     if not owner or owner.role != 'owner':
         return jsonify({'message': "Accès non autorisé."}), 403
 
-    # Copie de la logique de la route admin
+    # --- CLOUDINARY UPLOAD ---
+    # Pas besoin de sauvegarder temporairement le fichier, Cloudinary accepte le stream direct
     if 'file' not in request.files:
         return jsonify({'error': 'Aucun fichier fourni'}), 400
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'Nom de fichier vide'}), 400
-    filename = secure_filename(file.filename)
-    tmp_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
-    try:
-        file.save(tmp_path)
-        mega = get_mega_instance()
-        if not mega:
-            return jsonify({'error': 'Connexion stockage impossible'}), 503
-        node = mega.upload(tmp_path)
-        link = mega.get_upload_link(node)
-        return jsonify({'url': link}), 200
-    except Exception as e:
-        current_app.logger.error(f"Upload error: {e}")
-        return jsonify({'error': 'Erreur interne'}), 500
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+
+    from app.utils.cloudinary_utils import upload_image # Import tardif pour éviter cycle
+    
+    secure_url = upload_image(file, folder="woora_properties") # Dossier spécifique pour les biens
+    
+    if secure_url:
+        return jsonify({'url': secure_url}), 200
+    else:
+        return jsonify({'error': "Échec de l'upload vers Cloudinary"}), 500
 
 

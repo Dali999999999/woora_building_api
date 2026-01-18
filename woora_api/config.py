@@ -14,9 +14,8 @@ class Config:
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'noreply@example.com'
 
-    # Configuration Mega.nz
-    MEGA_EMAIL = os.environ.get('MEGA_EMAIL') or 'dev03112005@gmail.com'
-    MEGA_PASSWORD = os.environ.get('MEGA_PASSWORD') or 'CXW404notfound'
+    # Configuration Cloudinary (Géré automatiquement par CLOUDINARY_URL)
+    # Plus besoin de clés explicites ici si .env est correct
     #Paiement
     FEDAPAY_SECRET_KEY = os.environ.get('FEDAPAY_SECRET_KEY')
     FEDAPAY_PUBLIC_KEY = os.environ.get('FEDAPAY_PUBLIC_KEY')

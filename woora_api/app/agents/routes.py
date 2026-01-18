@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
-from app.utils.mega_utils import get_mega_instance
+# from app.utils.mega_utils import get_mega_instance # REMOVED
 from werkzeug.utils import secure_filename
 import uuid
 
@@ -931,22 +931,20 @@ def upload_image_for_agent():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'Nom de fichier vide'}), 400
-    filename = secure_filename(file.filename)
-    tmp_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
+
+    from app.utils.cloudinary_utils import upload_image # Tardif
+    
     try:
-        file.save(tmp_path)
-        mega = get_mega_instance()
-        if not mega:
-            return jsonify({'error': 'Connexion stockage impossible'}), 503
-        node = mega.upload(tmp_path)
-        link = mega.get_upload_link(node)
-        return jsonify({'url': link}), 200
+        secure_url = upload_image(file, folder="woora_properties") # Dossier properties
+        
+        if secure_url:
+            return jsonify({'url': secure_url}), 200
+        else:
+             return jsonify({'error': 'Erreur interne Cloudinary'}), 500
+
     except Exception as e:
         current_app.logger.error(f"Upload error: {e}")
         return jsonify({'error': 'Erreur interne'}), 500
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 @agents_bp.route('/properties/<int:property_id>', methods=['PUT'])
 @jwt_required()

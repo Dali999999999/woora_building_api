@@ -26,4 +26,5 @@ requests>=2.31.0,<3.0.0
 marshmallow>=3.20.0,<4.0.0
 
 # --- Librairies spécifiques au projet ---
-mega.py>=1.0.8  # Respect de votre contrainte
+cloudinary>=1.36.0
+# mega.py et tenacity retirés (Migration Cloudinary)

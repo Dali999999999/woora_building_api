@@ -10,7 +10,7 @@ from flask_jwt_extended import create_access_token
 from app import db
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
-from app.utils.mega_utils import get_mega_instance
+# from app.utils.mega_utils import get_mega_instance # REMOVED
 import os
 import uuid
 
@@ -216,6 +216,8 @@ def upload_profile_picture():
     current_user_id = get_jwt_identity()
     user = User.query.get_or_404(current_user_id)
 
+    # --- CLOUDINARY UPLOAD ---
+    # Pas besoin de sauvegarder temporairement le fichier
     if 'file' not in request.files:
         return jsonify({'error': 'Aucun fichier fourni'}), 400
     
@@ -223,27 +225,20 @@ def upload_profile_picture():
     if file.filename == '':
         return jsonify({'error': 'Nom de fichier vide'}), 400
 
-    filename = secure_filename(file.filename)
-    tmp_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{filename}")
+    from app.utils.cloudinary_utils import upload_image # Import tardif
     
     try:
-        file.save(tmp_path)
-        mega = get_mega_instance()
-        if not mega:
-            return jsonify({'error': 'Connexion au service de stockage impossible'}), 503
+        secure_url = upload_image(file, folder="woora_profiles") # Dossier spécifique profils
         
-        node = mega.upload(tmp_path)
-        link = mega.get_upload_link(node)
-        
+        if not secure_url:
+            return jsonify({'error': 'Échec de l\'upload vers Cloudinary'}), 500
+
         # Mettre à jour l'URL de la photo de profil de l'utilisateur
-        user.profile_picture_url = link
+        user.profile_picture_url = secure_url
         db.session.commit()
         
-        return jsonify({'message': 'Photo de profil mise à jour.', 'profile_picture_url': link}), 200
+        return jsonify({'message': 'Photo de profil mise à jour.', 'profile_picture_url': secure_url}), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur d'upload de la photo de profil: {e}")
         return jsonify({'error': 'Erreur interne du serveur.'}), 500
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
