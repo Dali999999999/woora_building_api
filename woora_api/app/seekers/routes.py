@@ -1,7 +1,7 @@
 # app/seekers/routes.py
 
 from flask import Blueprint, request, jsonify, current_app
-from app.models import Property, User, VisitRequest, Referral, PropertyRequest
+from app.models import Property, User, VisitRequest, Referral, PropertyRequest, UserFavorite, AgentReview
 from app import db # Assurez-vous que l'import de 'db' est correct
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
@@ -18,21 +18,73 @@ except ImportError:
 
 seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
 
+from sqlalchemy import or_
+import json
+
 @seekers_bp.route('/properties', methods=['GET'])
 @jwt_required()
 def get_all_properties_for_seeker():
     """
     Endpoint pour les chercheurs.
-    Récupère TOUS les biens immobiliers qui sont actuellement 'à vendre' ou 'à louer'.
+    Récupère les biens 'à vendre' ou 'à louer' avec filtrage avancé.
+    Paramètres GET supportés :
+    - search (text): Recherche dans titre, ville, adresse.
+    - min_price (number)
+    - max_price (number)
+    - property_type_id (int)
+    - filters (json string): Filtres dynamiques pour les attributs (ex: {"Piscine": "Oui"})
     """
-    # Pas besoin de vérifier le rôle ici
     
-    # --- DÉBUT DE LA CORRECTION ---
-    # On applique exactement le même filtre que pour les agents.
-    properties = Property.query.filter(
-        Property.status.in_(['for_sale', 'for_rent'])
-    ).all()
-    # --- FIN DE LA CORRECTION ---
+    # 1. Base Query : Statut Actif
+    query = Property.query.filter(Property.status.in_(['for_sale', 'for_rent']))
+
+    # 2. Recherche Textuelle (Titre, Ville, Adresse)
+    search_query = request.args.get('search', '').strip()
+    if search_query:
+        search_pattern = f"%{search_query}%"
+        query = query.filter(or_(
+            Property.title.ilike(search_pattern),
+            Property.city.ilike(search_pattern),
+            Property.address.ilike(search_pattern)
+        ))
+
+    # 3. Filtre par Type de Bien
+    try:
+        property_type_id = request.args.get('property_type_id')
+        if property_type_id:
+            query = query.filter(Property.property_type_id == int(property_type_id))
+    except (ValueError, TypeError):
+        pass # Ignorer si l'ID n'est pas un entier valide
+
+    # 4. Filtre par Prix (Min / Max)
+    try:
+        min_price = request.args.get('min_price')
+        if min_price:
+            query = query.filter(Property.price >= float(min_price))
+        
+        max_price = request.args.get('max_price')
+        if max_price:
+            query = query.filter(Property.price <= float(max_price))
+    except (ValueError, TypeError):
+        pass
+
+    # 5. Filtres Dynamiques (Attributs JSON)
+    # Format attendu: ?filters={"Piscine": "Oui", "Chambres": 3}
+    filters_json = request.args.get('filters')
+    if filters_json:
+        try:
+            dynamic_filters = json.loads(filters_json)
+            if isinstance(dynamic_filters, dict):
+                for key, value in dynamic_filters.items():
+                    # SQLAlchemy JSON operator for exact match
+                    # Note: Assure-toi que le type de 'value' correspond à celui dans la BDD (str vs int)
+                    # Pour la robustesse, on peut caster en string si nécessaire, mais ici on tente le match direct.
+                    query = query.filter(Property.attributes[key] == value)
+        except json.JSONDecodeError:
+            pass # Ignorer les filtres mal formés
+
+    # 6. Exécution et Tri (Plus récents en premier)
+    properties = query.order_by(Property.created_at.desc()).all()
 
     return jsonify([p.to_dict() for p in properties]), 200
 
@@ -339,3 +391,108 @@ def get_seeker_property_requests():
     requests = PropertyRequest.query.filter_by(customer_id=current_user_id).order_by(PropertyRequest.created_at.desc()).all()
     
     return jsonify([req.to_dict() for req in requests]), 200
+
+# ===================================================================
+# GESTION DES FAVORIS
+# ===================================================================
+
+@seekers_bp.route('/favorites/<int:property_id>', methods=['POST'])
+@jwt_required()
+def toggle_favorite(property_id):
+    """
+    Ajoute ou retire un bien des favoris de l'utilisateur connecté.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    # Vérifier l'existence du bien
+    property_obj = Property.query.get(property_id)
+    if not property_obj:
+        return jsonify({'message': "Bien immobilier non trouvé."}), 404
+
+    # Vérifier si déjà en favori
+    existing_fav = UserFavorite.query.filter_by(user_id=current_user_id, property_id=property_id).first()
+
+    try:
+        if existing_fav:
+            db.session.delete(existing_fav)
+            db.session.commit()
+            return jsonify({'message': "Bien retiré des favoris.", 'is_favorite': False}), 200
+        else:
+            new_fav = UserFavorite(user_id=current_user_id, property_id=property_id)
+            db.session.add(new_fav)
+            db.session.commit()
+            return jsonify({'message': "Bien ajouté aux favoris.", 'is_favorite': True}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur favoris: {e}")
+        return jsonify({'message': "Erreur lors de la mise à jour des favoris."}), 500
+
+@seekers_bp.route('/favorites', methods=['GET'])
+@jwt_required()
+def get_favorite_properties():
+    """
+    Récupère la liste des biens favoris de l'utilisateur.
+    """
+    current_user_id = get_jwt_identity()
+    
+    # Jointure pour récupérer les propriétés favorites
+    favorites = db.session.query(Property).join(UserFavorite).filter(UserFavorite.user_id == current_user_id).all()
+    
+    return jsonify([p.to_dict() for p in favorites]), 200
+
+# ===================================================================
+# GESTION DES AVIS AGENTS
+# ===================================================================
+
+@seekers_bp.route('/agents/<int:agent_id>/reviews', methods=['POST'])
+@jwt_required()
+def add_agent_review(agent_id):
+    """
+    Permet à un client de laisser un avis sur un agent.
+    """
+    current_user_id = get_jwt_identity()
+    customer = User.query.get(current_user_id)
+    agent = User.query.get(agent_id)
+
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Agent non trouvé."}), 404
+
+    data = request.get_json()
+    rating = data.get('rating')
+    comment = data.get('comment')
+
+    if not rating or not isinstance(rating, int) or not (1 <= rating <= 5):
+        return jsonify({'message': "La note doit être un entier entre 1 et 5."}), 400
+
+    # Optionnel : Vérifier si le client a déjà noté cet agent
+    existing_review = AgentReview.query.filter_by(agent_id=agent_id, customer_id=current_user_id).first()
+    if existing_review:
+        # Mise à jour de l'avis existant ou rejet ?
+        # Pour l'instant, rejetons la création de multiples avis
+        return jsonify({'message': "Vous avez déjà donné votre avis sur cet agent."}), 400
+
+    new_review = AgentReview(
+        agent_id=agent_id,
+        customer_id=current_user_id,
+        rating=rating,
+        comment=comment
+    )
+
+    try:
+        db.session.add(new_review)
+        db.session.commit()
+        return jsonify({'message': "Avis enregistré avec succès."}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur avis agent: {e}")
+        return jsonify({'message': "Erreur interne."}), 500
+
+@seekers_bp.route('/agents/<int:agent_id>/reviews', methods=['GET'])
+@jwt_required()
+def get_agent_reviews_list(agent_id):
+    """
+    Récupère les avis d'un agent.
+    """
+    reviews = AgentReview.query.filter_by(agent_id=agent_id).order_by(AgentReview.created_at.desc()).all()
+    return jsonify([r.to_dict() for r in reviews]), 200

@@ -44,6 +44,8 @@ class User(db.Model):
     transactions = db.relationship('Transaction', back_populates='user', cascade="all, delete-orphan")
     payout_requests = db.relationship('PayoutRequest', back_populates='agent', cascade="all, delete-orphan")
     favorites = db.relationship('UserFavorite', back_populates='user', cascade="all, delete-orphan")
+    reviews_received = db.relationship('AgentReview', foreign_keys='AgentReview.agent_id', back_populates='agent', cascade="all, delete-orphan")
+    reviews_given = db.relationship('AgentReview', foreign_keys='AgentReview.customer_id', back_populates='customer', cascade="all, delete-orphan")
 
     def __repr__(self):
         return f'<User {self.email}>'
@@ -211,7 +213,31 @@ class UserFavorite(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     user = db.relationship('User', back_populates='favorites')
+    user = db.relationship('User', back_populates='favorites')
     property = db.relationship('Property', back_populates='favorited_by')
+
+class AgentReview(db.Model):
+    __tablename__ = 'AgentReviews'
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
+    rating = db.Column(db.Integer, nullable=False) # 1 to 5
+    comment = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    agent = db.relationship('User', foreign_keys=[agent_id], back_populates='reviews_received')
+    customer = db.relationship('User', foreign_keys=[customer_id], back_populates='reviews_given')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'customer_id': self.customer_id,
+            'customer_name': f"{self.customer.first_name} {self.customer.last_name}",
+            'rating': self.rating,
+            'comment': self.comment,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 # ===================================================================
 # MODÈLES LIÉS AUX INTERACTIONS (VISITES, DEMANDES, PARRAINAGES)
