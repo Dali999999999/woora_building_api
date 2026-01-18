@@ -118,6 +118,9 @@ def refresh():
 def logout():
     response = jsonify({'message': 'Déconnexion réussie.'})
     unset_jwt_cookies(response)
+    # Nuclear option: Force delete potential legacy cookies with specific paths
+    response.set_cookie('refresh_token_cookie', '', expires=0, max_age=0, path='/auth/refresh')
+    response.set_cookie('access_token_cookie', '', expires=0, max_age=0, path='/auth/refresh')
     return response, 200
 
 # --- AJOUTEZ CETTE NOUVELLE FONCTION ---
