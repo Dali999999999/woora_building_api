@@ -27,7 +27,10 @@ def create_app():
         "origins": [
             re.compile(r"http://localhost:[0-9]+"),
             "https://woora-building-admin.vercel.app"
-        ]
+        ],
+        "supports_credentials": True,
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     }
 })
     # Gestionnaires d'erreurs JWT
