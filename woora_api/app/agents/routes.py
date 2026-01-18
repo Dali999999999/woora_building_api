@@ -32,14 +32,25 @@ def get_all_properties_for_agent():
         return jsonify({'message': "Accès non autorisé. Seuleument les agents peuvent accéder à cette ressource."}), 403
 
     # --- DÉBUT DE LA CORRECTION ---
+    # Pagination
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
     # On filtre les biens pour ne garder que ceux avec le statut 'for_sale' ou 'for_rent'.
-    # On utilise .in_() pour vérifier si le statut est dans la liste des statuts valides.
-    properties = Property.query.filter(
+    query = Property.query.filter(
         Property.status.in_(['for_sale', 'for_rent'])
-    ).all()
+    )
+    
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    properties = pagination.items
     # --- FIN DE LA CORRECTION ---
     
-    return jsonify([p.to_dict() for p in properties]), 200
+    return jsonify({
+        'properties': [p.to_dict() for p in properties],
+        'total': pagination.total,
+        'pages': pagination.pages,
+        'current_page': page
+    }), 200
 
 @agents_bp.route('/properties/<int:property_id>', methods=['GET'])
 @jwt_required()
@@ -282,7 +293,8 @@ def request_commission_payout():
     """Demander un versement de commissions en se basant sur le solde du portefeuille."""
     try:
         current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
+        # ✅ VERROUILLAGE PESSIMISTE: On verrouille la ligne utilisateur pour éviter les race conditions (double dépense)
+        user = User.query.with_for_update().get(current_user_id)
         
         if not user or user.role != 'agent':
             return jsonify({'error': 'Accès refusé.'}), 403
@@ -628,7 +640,8 @@ def request_withdrawal():
     Initie une demande de virement (Payout) pour l'agent connecté.
     """
     current_user_id = get_jwt_identity()
-    agent = User.query.get(current_user_id)
+    # ✅ VERROUILLAGE PESSIMISTE
+    agent = User.query.with_for_update().get(current_user_id)
     
     if not agent or agent.role != 'agent':
         return jsonify({'message': "Accès non autorisé."}), 403

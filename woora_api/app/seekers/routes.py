@@ -83,10 +83,19 @@ def get_all_properties_for_seeker():
         except json.JSONDecodeError:
             pass # Ignorer les filtres mal formés
 
-    # 6. Exécution et Tri (Plus récents en premier)
-    properties = query.order_by(Property.created_at.desc()).all()
+    # 6. Exécution et Tri (Plus récents en premier) avec Pagination
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    
+    pagination = query.order_by(Property.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    properties = pagination.items
 
-    return jsonify([p.to_dict() for p in properties]), 200
+    return jsonify({
+        'properties': [p.to_dict() for p in properties],
+        'total': pagination.total,
+        'pages': pagination.pages,
+        'current_page': page
+    }), 200
 
 @seekers_bp.route('/properties/<int:property_id>', methods=['GET'])
 @jwt_required()

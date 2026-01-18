@@ -5,6 +5,14 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'mysql+pymysql://user:password@localhost:3306/woora_db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # SQLAlchemy Engine Options (Connection Pooling)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 10,
+        'max_overflow': 20,
+        'pool_recycle': 1800, # Recycle connections every 30 minutes
+        'pool_pre_ping': True # Check connection health before using
+    }
+    
     # JWT Configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'super_secret_jwt_key'
     JWT_TOKEN_LOCATION = ['headers', 'cookies'] # Support both for mobile/web compatibility

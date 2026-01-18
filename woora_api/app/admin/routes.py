@@ -99,8 +99,44 @@ def get_transactions():
 # ------------- UTILISATEURS -------------
 @admin_bp.route('/users', methods=['GET'])
 def get_users():
-    users = User.query.all()
-    return jsonify([user.to_dict() for user in users])
+    # Récupération des paramètres de requête
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    search_term = request.args.get('search', '').strip()
+    role_filter = request.args.get('role', 'all')
+    
+    # Construction de la requête de base
+    query = User.query
+    
+    # Filtrage par recherche (Nom, Prénom, Email)
+    if search_term:
+        search_pattern = f"%{search_term}%"
+        query = query.filter(
+            db.or_(
+                User.email.ilike(search_pattern),
+                User.first_name.ilike(search_pattern),
+                User.last_name.ilike(search_pattern)
+            )
+        )
+    
+    # Filtrage par rôle
+    if role_filter and role_filter != 'all':
+        query = query.filter(User.role == role_filter)
+        
+    # Tri par défaut (plus récent en premier)
+    query = query.order_by(User.created_at.desc())
+    
+    # Pagination
+    pagination = query.paginate(page=page, per_page=limit, error_out=False)
+    
+    # Construction de la réponse metadata + data
+    return jsonify({
+        'users': [user.to_dict() for user in pagination.items],
+        'total': pagination.total,
+        'page': page,
+        'limit': limit,
+        'pages': pagination.pages
+    })
 
 @admin_bp.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
