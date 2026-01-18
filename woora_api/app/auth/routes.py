@@ -1,12 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, make_response
 from app.auth import services as auth_services
 from flask import current_app # Import added for logging
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token, create_refresh_token, set_access_cookies, set_refresh_cookies, unset_jwt_cookies
 from app.models import User
 import random
 import string
 from datetime import datetime, timedelta
-from flask_jwt_extended import create_access_token
 from app import db
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
@@ -76,17 +75,50 @@ def login():
             reason = user.suspension_reason or "Compte suspendu pour non-respect des règles."
             return jsonify({'message': f'Compte suspendu. Raison : {reason}'}), 403
 
-        return jsonify({
+        # Create refresh token
+        refresh_token = create_refresh_token(identity=str(user.id))
+
+        response = jsonify({
             'message': 'Connexion réussie.',
-            'access_token': access_token,
+            'access_token': access_token, # Keep for mobile compatibility
+            'refresh_token': refresh_token, # Keep for mobile compatibility
             'user_role': user.role,
             'user_id': user.id
-        }), 200
+        })
+        
+        # Set cookies for web
+        set_access_cookies(response, access_token)
+        set_refresh_cookies(response, refresh_token)
+
+        return response, 200
     except ValueError as e:
         return jsonify({'message': str(e)}), 401 # Unauthorized
     except Exception as e:
         current_app.logger.error(f'Erreur lors de la connexion: {e}', exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
+
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    """
+    Renouvelle le token d'accès en utilisant le refresh token (envoyé via cookie ou header).
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        new_access_token = create_access_token(identity=current_user_id)
+        
+        response = jsonify({'access_token': new_access_token})
+        set_access_cookies(response, new_access_token)
+        return response, 200
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors du refresh: {e}")
+        return jsonify({'message': 'Impossible de rafraîchir le token.'}), 401
+
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    response = jsonify({'message': 'Déconnexion réussie.'})
+    unset_jwt_cookies(response)
+    return response, 200
 
 # --- AJOUTEZ CETTE NOUVELLE FONCTION ---
 @auth_bp.route('/profile', methods=['GET'])
