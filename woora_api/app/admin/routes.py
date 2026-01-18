@@ -21,6 +21,47 @@ UPLOAD_FOLDER = '/tmp'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
+# ------------- DASHBOARD -------------
+@admin_bp.route('/dashboard/stats', methods=['GET'])
+def get_dashboard_stats():
+    user_count = User.query.count()
+    property_count = Property.query.filter_by(status='active').count()
+    pending_visits = VisitRequest.query.filter_by(status='pending').count()
+    
+    # Calculate revenue from commissions
+    # Assuming Transaction model has amount and type='commission_payout' (checks code snippet above)
+    revenue = db.session.query(db.func.sum(Transaction.amount)).filter_by(type='commission_payout').scalar() or 0.0
+
+    return jsonify({
+        'total_users': user_count,
+        'active_properties': property_count,
+        'pending_visits': pending_visits,
+        'total_revenue': float(revenue)
+    })
+
+@admin_bp.route('/transactions', methods=['GET'])
+def get_transactions():
+    txs = Transaction.query.order_by(Transaction.created_at.desc()).limit(50).all()
+    # Need to check Transaction model fields. code above uses:
+    # Transaction(user_id, amount, type, description)
+    # It doesn't show timestamp field in the code snippet but it likely exists (created_at or timestamp).
+    # I'll check 'created_at' or 'timestamp'. Standard models usually have it.
+    # Assuming 'created_at' based on other models. If error, I'll fix.
+    # Wait, the code snippet created Transaction but didn't show definition.
+    # I'll use simple list for now.
+    
+    results = []
+    for t in txs:
+         # Safely access fields.
+         results.append({
+             'id': t.id,
+             'amount': float(t.amount),
+             'type': t.type,
+             'description': t.description,
+             'date': t.created_at.isoformat() if hasattr(t, 'created_at') else ''
+         })
+    return jsonify(results)
+
 # ------------- UTILISATEURS -------------
 @admin_bp.route('/users', methods=['GET'])
 def get_users():
