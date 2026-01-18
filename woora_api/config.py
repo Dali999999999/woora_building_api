@@ -15,11 +15,12 @@ class Config:
     
     # JWT Configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'super_secret_jwt_key'
-    JWT_TOKEN_LOCATION = ['headers', 'cookies'] # Support both for mobile/web compatibility
-    JWT_COOKIE_SECURE = False # Set to True in production (HTTPS)
+    JWT_TOKEN_LOCATION = ['headers', 'cookies']
+    JWT_COOKIE_SECURE = True # Required for SameSite=None
+    JWT_COOKIE_SAMESITE = 'None' # Allows cross-origin requests (panel -> api)
     JWT_ACCESS_COOKIE_PATH = '/'
-    JWT_REFRESH_COOKIE_PATH = '/auth/refresh' # Only send refresh token to this path
-    JWT_COOKIE_CSRF_PROTECT = False # Disable CSRF for now for simplicity, enable later for better security
+    JWT_REFRESH_COOKIE_PATH = '/' # Simplify path to avoid mismatch on logout
+    JWT_COOKIE_CSRF_PROTECT = False
     JWT_ACCESS_COOKIE_NAME = 'access_token_cookie'
     JWT_REFRESH_COOKIE_NAME = 'refresh_token_cookie'
 
