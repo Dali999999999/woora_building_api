@@ -39,6 +39,40 @@ def get_dashboard_stats():
         'total_revenue': float(revenue)
     })
 
+
+@admin_bp.route('/users/<int:user_id>/suspend', methods=['PUT'])
+@jwt_required()
+def suspend_user(user_id):
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    user = User.query.get_or_404(user_id)
+    data = request.get_json() or {}
+    reason = data.get('reason', 'Non-respect des règles.')
+
+    user.is_suspended = True
+    user.suspension_reason = reason
+    db.session.commit()
+
+    return jsonify({'message': f'Utilisateur {user.email} suspendu.', 'is_suspended': True}), 200
+
+@admin_bp.route('/users/<int:user_id>/unsuspend', methods=['PUT'])
+@jwt_required()
+def unsuspend_user(user_id):
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    user = User.query.get_or_404(user_id)
+    user.is_suspended = False
+    user.suspension_reason = None
+    db.session.commit()
+
+    return jsonify({'message': f'Suspension levée pour {user.email}.', 'is_suspended': False}), 200
+
 @admin_bp.route('/transactions', methods=['GET'])
 def get_transactions():
     txs = Transaction.query.order_by(Transaction.created_at.desc()).limit(50).all()

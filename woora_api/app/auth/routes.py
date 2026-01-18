@@ -70,6 +70,12 @@ def login():
 
     try:
         user, access_token = auth_services.authenticate_user(email, password)
+        
+        # Check suspension
+        if user.is_suspended:
+            reason = user.suspension_reason or "Compte suspendu pour non-respect des règles."
+            return jsonify({'message': f'Compte suspendu. Raison : {reason}'}), 403
+
         return jsonify({
             'message': 'Connexion réussie.',
             'access_token': access_token,
