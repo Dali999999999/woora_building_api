@@ -30,6 +30,9 @@ class User(db.Model):
     is_suspended = db.Column(db.Boolean, default=False, nullable=False)
     suspension_reason = db.Column(db.Text, nullable=True)
 
+    # Verification logic
+    is_verified = db.Column(db.Boolean, default=True, nullable=False)
+
     # Relations (si un utilisateur est supprimé, toutes ses données associées le sont aussi)
     properties = db.relationship('Property', back_populates='owner', foreign_keys='Property.owner_id', cascade="all, delete-orphan")
     created_properties = db.relationship('Property', foreign_keys='Property.agent_id')
@@ -53,6 +56,7 @@ class User(db.Model):
             'visit_passes': self.visit_passes, 'profile_picture_url': self.profile_picture_url,
             'profession': self.profession, 'address': self.address, 'city': self.city,
             'country': self.country, 'bio': self.bio,
+            'is_verified': self.is_verified,
             'is_suspended': self.is_suspended, 'suspension_reason': self.suspension_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
