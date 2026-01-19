@@ -146,8 +146,21 @@ def get_user(user_id):
 # ------------- PROPRIÉTÉS -------------
 @admin_bp.route('/properties', methods=['GET'])
 def get_properties():
-    properties = Property.query.all()
-    return jsonify([p.to_dict() for p in properties])
+    properties = Property.query.options(selectinload(Property.owner)).order_by(Property.created_at.desc()).all()
+    results = []
+    for p in properties:
+        data = p.to_dict()
+        if p.owner:
+            data['owner_details'] = p.owner.to_dict()
+        results.append(data)
+    return jsonify(results)
+
+@admin_bp.route('/properties/<int:property_id>/validate', methods=['PUT'])
+def validate_property(property_id):
+    prop = Property.query.get_or_404(property_id)
+    prop.is_validated = True
+    db.session.commit()
+    return jsonify({'message': f"Bien '{prop.title}' validé avec succès.", 'property': prop.to_dict()}), 200
 
 # ------------- TYPES DE PROPRIÉTÉ -------------
 @admin_bp.route('/property_types', methods=['GET'])

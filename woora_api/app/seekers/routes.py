@@ -35,8 +35,11 @@ def get_all_properties_for_seeker():
     - filters (json string): Filtres dynamiques pour les attributs (ex: {"Piscine": "Oui"})
     """
     
-    # 1. Base Query : Statut Actif
-    query = Property.query.filter(Property.status.in_(['for_sale', 'for_rent']))
+    # 1. Base Query : Statut Actif ET Validé par l'admin
+    query = Property.query.filter(
+        Property.status.in_(['for_sale', 'for_rent']),
+        Property.is_validated == True
+    )
 
     # 2. Recherche Textuelle (Titre, Ville, Adresse)
     search_query = request.args.get('search', '').strip()
@@ -68,32 +71,55 @@ def get_all_properties_for_seeker():
     except (ValueError, TypeError):
         pass
 
-    # 5. Filtres Dynamiques (Attributs JSON)
-    # Format attendu: ?filters={"Piscine": "Oui", "Chambres": 3}
+    # 5. Récupération des candidats pour filtrage "Fuzzy" (Attributs)
+    # On récupère tous les candidats qui correspondent aux critères stricts (Prix, Ville, Type)
+    # pour appliquer la logique "au moins 3 correspondances" en Python.
+    candidate_properties = query.order_by(Property.created_at.desc()).all()
+    
+    final_properties = []
+    
     filters_json = request.args.get('filters')
     if filters_json:
         try:
             dynamic_filters = json.loads(filters_json)
-            if isinstance(dynamic_filters, dict):
-                for key, value in dynamic_filters.items():
-                    # SQLAlchemy JSON operator for exact match
-                    # Note: Assure-toi que le type de 'value' correspond à celui dans la BDD (str vs int)
-                    # Pour la robustesse, on peut caster en string si nécessaire, mais ici on tente le match direct.
-                    query = query.filter(Property.attributes[key] == value)
+            if isinstance(dynamic_filters, dict) and dynamic_filters:
+                # Logique Fuzzy Matching
+                target_match_count = min(3, len(dynamic_filters))
+                
+                for prop in candidate_properties:
+                    match_count = 0
+                    prop_attrs = prop.attributes or {}
+                    
+                    for key, value in dynamic_filters.items():
+                        # Comparaison souple (String vs Int etc.)
+                        if key in prop_attrs and str(prop_attrs[key]) == str(value):
+                            match_count += 1
+                            
+                    if match_count >= target_match_count:
+                        final_properties.append(prop)
+                        
+            else:
+                final_properties = candidate_properties
         except json.JSONDecodeError:
-            pass # Ignorer les filtres mal formés
+             final_properties = candidate_properties
+    else:
+        final_properties = candidate_properties
 
-    # 6. Exécution et Tri (Plus récents en premier) avec Pagination
+    # 6. Pagination Manuelle
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     
-    pagination = query.order_by(Property.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-    properties = pagination.items
+    total = len(final_properties)
+    start = (page - 1) * per_page
+    end = start + per_page
+    
+    sliced_properties = final_properties[start:end]
+    total_pages = (total + per_page - 1) // per_page
 
     return jsonify({
-        'properties': [p.to_dict() for p in properties],
-        'total': pagination.total,
-        'pages': pagination.pages,
+        'properties': [p.to_dict() for p in sliced_properties],
+        'total': total,
+        'pages': total_pages,
         'current_page': page
     }), 200
 
