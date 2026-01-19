@@ -300,6 +300,14 @@ class PropertyRequest(db.Model):
             'max_price': float(self.max_price) if self.max_price is not None else None,
             'status': self.status, 'admin_notes': self.admin_notes,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'customer': {
+                'id': self.customer.id,
+                'first_name': self.customer.first_name,
+                'last_name': self.customer.last_name,
+                'email': self.customer.email,
+                'phone_number': self.customer.phone_number,
+                'profile_image_url': self.customer.profile_picture_url
+            } if self.customer else None
         }
 
 # ===================================================================
