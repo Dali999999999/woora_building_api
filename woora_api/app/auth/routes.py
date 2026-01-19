@@ -70,6 +70,10 @@ def login():
     try:
         user, access_token = auth_services.authenticate_user(email, password)
         
+        if user.deleted_at:
+             reason = user.deletion_reason or "Compte supprimé par l'administrateur."
+             return jsonify({'message': f'Ce compte a été supprimé. Motif : {reason}'}), 403
+
         # Check suspension
         if user.is_suspended:
             reason = user.suspension_reason or "Compte suspendu pour non-respect des règles."

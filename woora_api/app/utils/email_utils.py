@@ -51,6 +51,73 @@ def send_admin_rejection_notification(customer_email, property_title, message):
         current_app.logger.error(f"Erreur lors de l\'envoi de l\'email de rejet admin: {e}", exc_info=True)
         return False
 
+def send_property_invalidation_email(owner_email, property_title, reason):
+    msg = Message(
+        f'Mise à jour pour votre bien : {property_title}',
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[owner_email]
+    )
+    msg.body = (
+        f'Bonjour,\n\n'
+        f'Nous souhaitons vous informer d\'une mise à jour concernant votre bien "{property_title}".\n\n'
+        f'Après examen par notre équipe, ce bien ne peut pas être publié en l\'état et a été mis en statut "Non Validé".\n\n'
+        f'Motif indiqué par l\'administrateur :\n'
+        f'"{reason if reason else "Non spécifié"}"\n\n'
+        f'Vous pouvez modifier votre annonce depuis votre application pour corriger ces points et la soumettre à nouveau.\n\n'
+        f'Cordialement,\n'
+        f'L\'équipe Woora Immo'
+    )
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email d'invalidation de bien envoyé à {owner_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de l'envoi de l'email d'invalidation: {e}", exc_info=True)
+        return False
+
+def send_alert_match_email(customer_email, customer_name, property_title, property_id):
+    msg = Message(
+        f'Nouveau bien correspondant à votre recherche ! 🏠',
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[customer_email]
+    )
+    msg.body = (
+        f'Bonjour {customer_name},\n\n'
+        f'Bonne nouvelle ! Un nouveau bien vient d\'être publié et correspond à vos critères de recherche.\n\n'
+        f'"{property_title}"\n\n'
+        f'Ouvrez vite l\'application Woora Building pour le consulter avant tout le monde !\n\n'
+        f'Cordialement,\n'
+        f'L\'équipe Woora Immo'
+    )
+    try:
+        mail.send(msg)
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur email alerte: {e}")
+        return False
+
+def send_account_deletion_email(user_email, user_name, reason):
+    msg = Message(
+        f'Suppression de votre compte Woora Immo',
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[user_email]
+    )
+    msg.body = (
+        f'Bonjour {user_name},\n\n'
+        f'Nous vous informons que votre compte Woora Immo a été supprimé par l\'administrateur.\n\n'
+        f'Motif : {reason if reason else "Aucun motif spécifique."}\n\n'
+        f'Vos données et vos annonces ne sont plus accessibles.\n'
+        f'Si vous pensez qu\'il s\'agit d\'une erreur, veuillez contacter le support.\n\n'
+        f'Cordialement,\n'
+        f'L\'équipe Woora Immo'
+    )
+    try:
+        mail.send(msg)
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur email suppression compte: {e}")
+        return False
+
 def send_admin_confirmation_to_owner(owner_email, customer_name, property_title, requested_datetime):
     msg = Message(
         f'Demande de Visite Confirmée pour {property_title}',

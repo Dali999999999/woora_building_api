@@ -35,10 +35,11 @@ def get_all_properties_for_seeker():
     - filters (json string): Filtres dynamiques pour les attributs (ex: {"Piscine": "Oui"})
     """
     
-    # 1. Base Query : Statut Actif ET Validé par l'admin
-    query = Property.query.filter(
+    # 1. Base Query : Statut Actif ET Validé par l'admin ET Propriétaire non supprimé
+    query = Property.query.join(Property.owner).filter(
         Property.status.in_(['for_sale', 'for_rent']),
-        Property.is_validated == True
+        Property.is_validated == True,
+        User.deleted_at == None
     )
 
     # 2. Recherche Textuelle (Titre, Ville, Adresse)

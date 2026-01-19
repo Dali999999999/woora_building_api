@@ -105,8 +105,8 @@ def get_users():
     search_term = request.args.get('search', '').strip()
     role_filter = request.args.get('role', 'all')
     
-    # Construction de la requête de base
-    query = User.query
+    # Construction de la requête de base (EXCLURE LES SUPPRIMÉS)
+    query = User.query.filter(User.deleted_at == None)
     
     # Filtrage par recherche (Nom, Prénom, Email)
     if search_term:
@@ -143,6 +143,36 @@ def get_user(user_id):
     user = User.query.get_or_404(user_id)
     return jsonify(user.to_dict())
 
+from datetime import datetime
+from app.utils.email_utils import send_alert_match_email, send_account_deletion_email
+
+@admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+def delete_user(user_id):
+    """
+    Soft delete user: Mark user as deleted but keep data.
+    """
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    user = User.query.get_or_404(user_id)
+    
+    # Get Reason if provided
+    data = request.json or {} 
+    reason = data.get('reason')
+
+    user.deleted_at = datetime.utcnow()
+    user.deletion_reason = reason
+    
+    db.session.commit()
+    
+    # Send Notification
+    send_account_deletion_email(user.email, user.first_name, reason)
+
+    return jsonify({'message': 'Utilisateur supprimé (Soft Delete) avec succès.'}), 200
+
 # ------------- PROPRIÉTÉS -------------
 @admin_bp.route('/properties', methods=['GET'])
 def get_properties():
@@ -158,9 +188,82 @@ def get_properties():
 @admin_bp.route('/properties/<int:property_id>/validate', methods=['PUT'])
 def validate_property(property_id):
     prop = Property.query.get_or_404(property_id)
+      
+    # Clean up any rejection reason if it exists
+    if prop.attributes and '_rejection_reason' in prop.attributes:
+        new_attrs = dict(prop.attributes)
+        new_attrs.pop('_rejection_reason', None)
+        prop.attributes = new_attrs
+
+    # TRIGGER MATCHING ENGINE ONLY IF NOT ALREADY VALIDATED
+    should_run_matching = not prop.is_validated
     prop.is_validated = True
-    db.session.commit()
+
+    try:
+        db.session.commit()
+        
+        if should_run_matching:
+            # 1. Find matching alerts (PropertyRequests)
+            # Criteria: Same Type AND (City matching OR Price in range)
+            matching_requests = PropertyRequest.query.filter(
+                PropertyRequest.property_type_id == prop.property_type_id,
+                PropertyRequest.status.in_(['new', 'in_progress'])
+            ).all()
+            
+            # Simple Python-side filtering for city (case-insensitive) and price logic to avoid complex hybrid SQL
+            for req in matching_requests:
+                # City check (if specified in request)
+                city_match = True
+                if req.city and prop.city:
+                    if req.city.lower() not in prop.city.lower():
+                        city_match = False
+                
+                # Price check
+                price_match = True
+                if prop.price:
+                     if req.min_price and prop.price < req.min_price: price_match = False
+                     if req.max_price and prop.price > req.max_price: price_match = False
+                
+                if city_match and price_match:
+                    # SEND NOTIFICATION
+                     seeker = User.query.get(req.customer_id)
+                     if seeker:
+                         send_alert_match_email(seeker.email, seeker.first_name, prop.title, prop.id)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur validation/matching: {e}")
+        return jsonify({'message': "Erreur lors de la validation."}), 500
+
     return jsonify({'message': f"Bien '{prop.title}' validé avec succès.", 'property': prop.to_dict()}), 200
+
+from app.models import Property, PropertyImage, User, PropertyType, VisitRequest,  PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyRequest
+from app.utils.email_utils import send_admin_response_to_seeker, send_property_invalidation_email, send_alert_match_email
+
+# ... (other code)
+
+@admin_bp.route('/properties/<int:property_id>/invalidate', methods=['PUT'])
+def invalidate_property(property_id):
+    prop = Property.query.get_or_404(property_id)
+    data = request.get_json() or {}
+    reason = data.get('reason')
+
+    prop.is_validated = False
+    
+    if reason:
+        current_attrs = dict(prop.attributes) if prop.attributes else {}
+        current_attrs['_rejection_reason'] = reason
+        prop.attributes = current_attrs
+        
+        # Notify Owner
+        owner = User.query.get(prop.owner_id)
+        if owner:
+            # Use the dedicated property invalidation email function
+            send_property_invalidation_email(owner.email, prop.title, reason)
+
+
+    db.session.commit()
+    return jsonify({'message': f"Bien invalidé.", 'property': prop.to_dict()}), 200
 
 # ------------- TYPES DE PROPRIÉTÉ -------------
 @admin_bp.route('/property_types', methods=['GET'])

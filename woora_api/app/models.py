@@ -29,6 +29,10 @@ class User(db.Model):
     # Suspension logic
     is_suspended = db.Column(db.Boolean, default=False, nullable=False)
     suspension_reason = db.Column(db.Text, nullable=True)
+    
+    # Soft Delete
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deletion_reason = db.Column(db.Text, nullable=True)
 
     # Verification logic
     is_verified = db.Column(db.Boolean, default=True, nullable=False)
