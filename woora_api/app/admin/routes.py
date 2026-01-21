@@ -814,7 +814,11 @@ def delete_property_attribute(attribute_id):
     # --- VÉRIFICATION D'USAGE (CRUCIAL) ---
     # On vérifie si un bien utilise cet attribut dans son champ JSON.
     # C'est une vérification simple mais efficace.
-    properties_using_attribute = Property.query.filter(Property.attributes.isnot(None)).all()
+    # CORRECTION: On ignore les biens supprimés (Soft Delete)
+    properties_using_attribute = Property.query.filter(
+        Property.attributes.isnot(None),
+        Property.deleted_at == None
+    ).all()
     
     for prop in properties_using_attribute:
         if isinstance(prop.attributes, dict) and attr.name in prop.attributes:

@@ -1,3 +1,13 @@
+import os
+from dotenv import load_dotenv
+
+# Force load .env from current directory
+basedir = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(basedir, '.env'))
+
+# Verify DATABASE_URL is loaded
+print(f"DEBUG: DATABASE_URL loaded? {'Yes' if os.getenv('DATABASE_URL') else 'No'}")
+
 from app import create_app, db
 from sqlalchemy import text
 
