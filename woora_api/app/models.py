@@ -160,6 +160,10 @@ class Property(db.Model):
     longitude = db.Column(db.Numeric(9, 6))
     attributes = db.Column(db.JSON)
     is_validated = db.Column(db.Boolean, default=False)
+    # Soft Delete for Property
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deletion_reason = db.Column(db.Text, nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

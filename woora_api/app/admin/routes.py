@@ -176,7 +176,7 @@ def delete_user(user_id):
 # ------------- PROPRIÉTÉS -------------
 @admin_bp.route('/properties', methods=['GET'])
 def get_properties():
-    properties = Property.query.options(selectinload(Property.owner)).order_by(Property.created_at.desc()).all()
+    properties = Property.query.filter(Property.deleted_at == None).options(selectinload(Property.owner)).order_by(Property.created_at.desc()).all()
     results = []
     for p in properties:
         data = p.to_dict()
@@ -264,6 +264,51 @@ def invalidate_property(property_id):
 
     db.session.commit()
     return jsonify({'message': f"Bien invalidé.", 'property': prop.to_dict()}), 200
+
+@admin_bp.route('/properties/<int:property_id>', methods=['DELETE'])
+@jwt_required()
+def delete_property_admin(property_id):
+    """
+    Soft delete property: Mark as deleted but keep data.
+    """
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    prop = Property.query.get_or_404(property_id)
+    
+    data = request.json or {}
+    reason = data.get('reason')
+
+    prop.deleted_at = datetime.utcnow()
+    prop.deletion_reason = reason
+    
+    # Optional: Should we change status to 'withdrawn' or similar?
+    # Keeping it simple as soft delete hides it from lists.
+
+    # Handling dependencies:
+    # 1. Visit Requests: pending ones should probably be rejected or cancelled.
+    pending_visits = VisitRequest.query.filter_by(property_id=prop.id, status='pending').all()
+    for visit in pending_visits:
+        visit.status = 'rejected'
+        visit.message = f"Bien supprimé par l'administrateur. Raison: {reason}"
+        
+        # Notify seeker
+        customer = User.query.get(visit.customer_id)
+        if customer:
+            from app.utils.email_utils import send_admin_rejection_notification
+            send_admin_rejection_notification(customer.email, prop.title, visit.message)
+
+    db.session.commit()
+    
+    # Notify Owner
+    owner = User.query.get(prop.owner_id)
+    if owner:
+        # We can reuse invalidation email or create a new one. Using invalidation for now as it conveys "removed".
+        send_property_invalidation_email(owner.email, prop.title, f"Votre bien a été supprimé par l'administration. Raison: {reason}")
+
+    return jsonify({'message': 'Bien immobilier supprimé (Soft Delete) avec succès.'}), 200
 
 # ------------- TYPES DE PROPRIÉTÉ -------------
 @admin_bp.route('/property_types', methods=['GET'])
