@@ -902,8 +902,11 @@ def get_agent_created_properties():
     """
     current_user_id = get_jwt_identity()
     agent = User.query.get(current_user_id)
-    if not agent or agent.role != 'agent':
-        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent voir leurs biens créés."}), 403
+    if not agent:
+        return jsonify({'message': "Utilisateur non trouvé."}), 404
+    
+    if str(agent.role) != 'agent':
+        return jsonify({'message': f"Accès non autorisé. Votre rôle est '{agent.role}', mais 'agent' est requis."}), 403
 
     # Récupérer toutes les propriétés créées par cet agent
     properties = Property.query.filter_by(agent_id=current_user_id).all()
