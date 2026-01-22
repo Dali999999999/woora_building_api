@@ -68,6 +68,33 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
     return True # Indique que l\'initiation de l\'inscription a réussi
 
 
+def resend_verification_email_service(email):
+    """
+    Renvoyer un code de vérification à un utilisateur en attente de validation.
+    """
+    if email not in _pending_registrations:
+        # On vérifie si l'utilisateur existe déjà (déjà vérifié ?)
+        user = User.query.filter_by(email=email).first()
+        if user:
+            raise ValueError("Ce compte est déjà vérifié. Veuillez vous connecter.")
+        raise ValueError("Aucune inscription en attente pour cet e-mail.")
+
+    # Générer un nouveau code
+    new_code = generate_verification_code()
+    new_expires_at = datetime.utcnow() + timedelta(minutes=10)
+
+    # Mettre à jour l'entrée existante
+    _pending_registrations[email]['code'] = new_code
+    _pending_registrations[email]['expires_at'] = new_expires_at
+
+    # Renvoyer l'email
+    if not send_verification_email(email, new_code):
+        raise ValueError("Erreur lors de l'envoi de l'e-mail.")
+    
+    return True
+
+
+
 def verify_email_and_register(email, code):
     if email not in _pending_registrations:
         raise ValueError('Aucune inscription en attente pour cet e-mail.')

@@ -58,7 +58,23 @@ def verify_email():
         current_app.logger.error(f'Erreur lors de la vérification de l\'e-mail: {e}', exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
 
-@auth_bp.route('/login', methods=['POST'])
+@auth_bp.route('/resend-verification-code', methods=['POST'])
+def resend_verification_code():
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({'message': 'L\'e-mail est requis.'}), 400
+
+    try:
+        auth_services.resend_verification_email_service(email)
+        return jsonify({'message': 'Un nouveau code de vérification a été envoyé.'}), 200
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f'Erreur lors du renvoi du code: {e}', exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
+
 def login():
     data = request.get_json()
     email = data.get('email')
