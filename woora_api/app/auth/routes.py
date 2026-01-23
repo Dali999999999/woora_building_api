@@ -75,6 +75,7 @@ def resend_verification_code():
         current_app.logger.error(f'Erreur lors du renvoi du code: {e}', exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
 
+@auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
     email = data.get('email')
