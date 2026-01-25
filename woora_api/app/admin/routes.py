@@ -550,6 +550,13 @@ def reject_visit_request_by_admin(request_id):
     vr.status = 'rejected'
     msg = request.get_json().get('message', 'Rejet admin.')
     try:
+        # REMBOURSEMENT AUTOMATIQUE DU PASS
+        if vr.customer_id:
+            customer_to_refund = User.query.with_for_update().get(vr.customer_id)
+            if customer_to_refund:
+                customer_to_refund.visit_passes += 1
+                current_app.logger.info(f"[ADMIN] Remboursement de 1 pass au client {customer_to_refund.id} suite au rejet de la visite {vr.id}")
+
         db.session.commit()
         customer = User.query.get(vr.customer_id)
         prop = Property.query.get(vr.property_id)
@@ -635,11 +642,11 @@ def mark_property_as_transacted(property_id):
         if not vr or vr.property_id != property_id:
             return jsonify({'message': 'ID de la demande de visite invalide ou ne correspondant pas au bien.'}), 400
         
-        # Si cette visite est liée à un parrainage
         if vr.referral_id:
             ref = Referral.query.get(vr.referral_id)
             if ref and ref.agent_id:
-                agent = User.query.get(ref.agent_id)
+                # SÉCURITÉ : Verrouillage du compte agent pour la mise à jour du solde
+                agent = User.query.with_for_update().get(ref.agent_id)
                 if agent and agent.role == 'agent':
                     # Récupérer le pourcentage de commission depuis les paramètres
                     commission_setting = AppSetting.query.filter_by(setting_key='agent_commission_percentage').first()

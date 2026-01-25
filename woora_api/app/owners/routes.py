@@ -453,6 +453,14 @@ def reject_visit_request_by_owner(request_id):
     message = data.get('message', 'La demande de visite a été rejetée par le propriétaire.')
 
     try:
+        # REMBOURSEMENT AUTOMATIQUE DU PASS
+        # On verrouille la ligne client pour éviter les incohérences
+        if visit_request.customer_id:
+            customer_to_refund = User.query.with_for_update().get(visit_request.customer_id)
+            if customer_to_refund:
+                customer_to_refund.visit_passes += 1
+                current_app.logger.info(f"Remboursement de 1 pass au client {customer_to_refund.id} suite au rejet de la visite {visit_request.id}")
+
         db.session.commit()
 
         # Envoyer une notification par e-mail au client
