@@ -789,6 +789,17 @@ def update_property_attribute(attribute_id):
             AttributeOption.query.filter_by(attribute_id=attr.id).delete()
         attr.data_type = new_data_type
 
+    # Gestion de la mise à jour des options pour les ENUM
+    if attr.data_type == 'enum' and 'options' in data:
+        # On supprime les anciennes options et on recrée les nouvelles
+        # C'est la méthode la plus sûre pour garantir la synchro
+        AttributeOption.query.filter_by(attribute_id=attr.id).delete()
+        
+        new_options = data.get('options', [])
+        for val in new_options:
+            if val and val.strip(): # On évite les options vides
+                db.session.add(AttributeOption(attribute_id=attr.id, option_value=val.strip()))
+
     # La mise à jour de 'is_filterable' est toujours autorisée
     if 'is_filterable' in data:
         attr.is_filterable = data['is_filterable']
