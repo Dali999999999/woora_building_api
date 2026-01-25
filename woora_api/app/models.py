@@ -36,6 +36,12 @@ class User(db.Model):
 
     # Verification logic
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    verification_code = db.Column(db.String(10), nullable=True)
+    verification_code_expires = db.Column(db.DateTime, nullable=True)
+
+    # Password Reset Logic (Stored in DB for Multi-Worker Support)
+    reset_password_token = db.Column(db.String(10), nullable=True) # Le code OTP
+    reset_password_expires = db.Column(db.DateTime, nullable=True)
 
     # Relations (si un utilisateur est supprimé, toutes ses données associées le sont aussi)
     properties = db.relationship('Property', back_populates='owner', foreign_keys='Property.owner_id', cascade="all, delete-orphan")

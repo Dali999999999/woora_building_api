@@ -10,11 +10,7 @@ from flask_jwt_extended import create_access_token
 from app import db, mail
 from app.models import User, AppSetting
 
-# Stockage temporaire pour les inscriptions en attente de vérification
-# Clé: email, Valeur: {'data': user_data, 'code': verification_code, 'expires_at': datetime}
-_pending_registrations = {}
-# Stockage temporaire pour les demandes de réinitialisation
-_pending_resets = {}
+
 
 def generate_verification_code():
     return ''.join(random.choices(string.digits, k=6))
@@ -68,16 +64,13 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
         )
         db.session.add(user)
 
+    # On stocke le code en BASE DE DONNÉES (Support multi-workers)
+    user.verification_code = verification_code
+    user.verification_code_expires = expires_at
+
     db.session.commit()
 
-    # On stocke le code en mémoire (ou idéalement en DB, mais on garde la structure actuelle)
-    # Note: Si le serveur redémarre, le code est perdu de la mémoire.
-    # Pour être robuste, on devrait stocker le code dans le User, mais sans changer le schéma DB,
-    # on continue d'utiliser _pending_registrations comme cache de validation.
-    _pending_registrations[email] = {
-        'code': verification_code,
-        'expires_at': expires_at
-    }
+    # Envoyer l'e-mail de vérification
 
     # Envoyer l'e-mail de vérification
     if not send_verification_email(email, verification_code):
@@ -104,11 +97,10 @@ def resend_verification_email_service(email):
     new_code = generate_verification_code()
     new_expires_at = datetime.utcnow() + timedelta(minutes=10)
 
-    # On met à jour la mémoire
-    _pending_registrations[email] = {
-        'code': new_code,
-        'expires_at': new_expires_at
-    }
+    # On met à jour la DB
+    user.verification_code = new_code
+    user.verification_code_expires = new_expires_at
+    db.session.commit()
 
     # Renvoyer l'email
     if not send_verification_email(email, new_code):
@@ -117,19 +109,23 @@ def resend_verification_email_service(email):
     return True
 
 def verify_email_and_register(email, code):
-    # On vérifie d'abord la validité du code en mémoire
-    if email not in _pending_registrations:
-        # Fallback: Si le serveur a redémarré, l'utilisateur est peut-être en DB mais le code est perdu.
-        # Dans ce cas, l'utilisateur doit demander un renvoi de code.
-        raise ValueError('Code expiré ou introuvable. Veuillez demander un nouveau code.')
+    # Récupération de l'utilisateur en base
+    user = User.query.filter_by(email=email).first()
+    
+    if not user:
+        raise ValueError('Utilisateur introuvable. Veuillez vous inscrire.')
 
-    pending_reg = _pending_registrations[email]
+    if user.is_verified:
+        return user # Déjà fait
 
-    if pending_reg['code'] != code:
+    # Vérification du code en DB
+    if not user.verification_code or not user.verification_code_expires:
+         raise ValueError('Aucun code de vérification en attente. Veuillez en demander un nouveau.')
+
+    if user.verification_code != code:
         raise ValueError('Code de vérification invalide.')
 
-    if datetime.utcnow() > pending_reg['expires_at']:
-        del _pending_registrations[email]
+    if datetime.utcnow() > user.verification_code_expires:
         raise ValueError('Code de vérification expiré.')
 
     # Récupération de l'utilisateur en base
@@ -154,8 +150,9 @@ def verify_email_and_register(email, code):
     db.session.commit()
 
     # Nettoyage
-    if email in _pending_registrations:
-        del _pending_registrations[email]
+    user.verification_code = None
+    user.verification_code_expires = None
+    db.session.commit()
 
     return user
 

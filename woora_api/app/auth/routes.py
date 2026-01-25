@@ -175,13 +175,12 @@ def forgot_password():
 
     # On utilise la logique du service d'authentification
     verification_code = auth_services.generate_verification_code()
-    expiration_time = datetime.utcnow() + timedelta(seconds=60)
+    expiration_time = datetime.utcnow() + timedelta(seconds=600) # 10 minutes
 
-    # On stocke en mémoire
-    auth_services._pending_resets[email] = {
-        'code': verification_code,
-        'expires_at': expiration_time
-    }
+    # On stocke en BASE DE DONNÉES
+    user.reset_password_token = verification_code
+    user.reset_password_expires = expiration_time
+    db.session.commit()
 
     # On envoie l'email via le service
     auth_services.send_reset_password_email(email, verification_code)
@@ -196,17 +195,24 @@ def verify_reset_code():
     email = data.get('email')
     code = data.get('code')
     
-    # On vérifie dans le dictionnaire en mémoire
-    pending_reset = auth_services._pending_resets.get(email)
+    user = User.query.filter_by(email=email).first()
     
-    if not pending_reset or pending_reset['code'] != code or datetime.utcnow() > pending_reset['expires_at']:
-        return jsonify({"message": "Code invalide ou expiré."}), 400
+    if not user or not user.reset_password_token:
+         return jsonify({"message": "Aucune demande de réinitialisation en cours."}), 400
+
+    if user.reset_password_token != code:
+        return jsonify({"message": "Code invalide."}), 400
+        
+    if datetime.utcnow() > user.reset_password_expires:
+        return jsonify({"message": "Code expiré."}), 400
         
     # Le code est valide, on crée un token temporaire
     reset_token = create_access_token(identity=email, expires_delta=timedelta(minutes=15))
     
-    # On supprime l'entrée du dictionnaire
-    del auth_services._pending_resets[email]
+    # On supprime le token pour empêcher la réutilisation
+    user.reset_password_token = None
+    user.reset_password_expires = None
+    db.session.commit()
     
     return jsonify({"reset_token": reset_token}), 200
 
