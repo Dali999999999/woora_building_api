@@ -18,109 +18,115 @@ except ImportError:
 
 seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
 
-from sqlalchemy import or_
-import json
-
+from sqlalchemy import or_, desc, case, func, cast, String
 from sqlalchemy.orm import selectinload # Optimization N+1
+import json
 
 @seekers_bp.route('/properties', methods=['GET'])
 @jwt_required()
 def get_all_properties_for_seeker():
     """
     Endpoint pour les chercheurs.
-    Récupère les biens 'à vendre' ou 'à louer' avec filtrage avancé.
-    Optimisé avec selectinload pour les images.
+    Récupère les biens 'à vendre' ou 'à louer' avec filtrage avancé (SQL pur).
+    Utilise un système de Scoring pour les filtres secondaires (attributs) et la pagination SQL.
     """
     
-    # 1. Base Query Optimisée : On pré-charge les images pour éviter le N+1
-    query = Property.query.options(
+    # --- 1. Base Query ---
+    # On commence par définir les colonnes de base et les relations à charger
+    base_query = Property.query.options(
         selectinload(Property.images),
-        selectinload(Property.property_type)
+        selectinload(Property.property_type),
+        selectinload(Property.owner)
     ).join(Property.owner).filter(
         Property.status.in_(['for_sale', 'for_rent']),
         Property.is_validated == True,
         User.deleted_at == None
     )
 
-    # 2. Recherche Textuelle (Titre, Ville, Adresse)
+    # --- 2. Filtres "Durs" (Exclusion) ---
+    # Ces filtres éliminent les résultats qui ne correspondent PAS.
+    
+    # Recherche Textuelle
     search_query = request.args.get('search', '').strip()
     if search_query:
         search_pattern = f"%{search_query}%"
-        query = query.filter(or_(
+        base_query = base_query.filter(or_(
             Property.title.ilike(search_pattern),
             Property.city.ilike(search_pattern),
             Property.address.ilike(search_pattern)
         ))
 
-    # 3. Filtre par Type de Bien
+    # Type de Bien
     try:
         property_type_id = request.args.get('property_type_id')
         if property_type_id:
-            query = query.filter(Property.property_type_id == int(property_type_id))
-    except (ValueError, TypeError):
-        pass # Ignorer si l'ID n'est pas un entier valide
-
-    # 4. Filtre par Prix (Min / Max)
-    try:
-        min_price = request.args.get('min_price')
-        if min_price:
-            query = query.filter(Property.price >= float(min_price))
-        
-        max_price = request.args.get('max_price')
-        if max_price:
-            query = query.filter(Property.price <= float(max_price))
+            base_query = base_query.filter(Property.property_type_id == int(property_type_id))
     except (ValueError, TypeError):
         pass
 
-    # 5. Récupération des candidats pour filtrage "Fuzzy" (Attributs)
-    # On récupère tous les candidats qui correspondent aux critères stricts (Prix, Ville, Type)
-    # pour appliquer la logique "au moins 3 correspondances" en Python.
-    candidate_properties = query.order_by(Property.created_at.desc()).all()
+    # Prix Min / Max
+    try:
+        min_price = request.args.get('min_price')
+        if min_price:
+            base_query = base_query.filter(Property.price >= float(min_price))
+        
+        max_price = request.args.get('max_price')
+        if max_price:
+            base_query = base_query.filter(Property.price <= float(max_price))
+    except (ValueError, TypeError):
+        pass
+
+    # --- 3. Filtres "Flous" (Score de Pertinence) ---
+    # Au lieu d'exclure, on calcule un SCORE. Plus le bien a d'attributs correspondants, plus le score est élevé.
     
-    final_properties = []
-    
+    relevance_score = 0
+    filter_active = False
+
     filters_json = request.args.get('filters')
     if filters_json:
         try:
             dynamic_filters = json.loads(filters_json)
             if isinstance(dynamic_filters, dict) and dynamic_filters:
-                # Logique Fuzzy Matching
-                target_match_count = min(3, len(dynamic_filters))
-                
-                for prop in candidate_properties:
-                    match_count = 0
-                    prop_attrs = prop.attributes or {}
+                filter_active = True
+                for key, value in dynamic_filters.items():
+                    # On utilise JSON_UNQUOTE(JSON_EXTRACT(...)) via func.json_extract
+                    # Note : La syntaxe dépend du dialecte SQL (ici MySQL/MariaDB)
+                    # Property.attributes[key] fonctionne souvent avec SQLAlchemy moderne comme json_extract
                     
-                    for key, value in dynamic_filters.items():
-                        # Comparaison souple (String vs Int etc.)
-                        if key in prop_attrs and str(prop_attrs[key]) == str(value):
-                            match_count += 1
-                            
-                    if match_count >= target_match_count:
-                        final_properties.append(prop)
-                        
-            else:
-                final_properties = candidate_properties
+                    # On ajoute 1 point si la valeur correspond (en castant en string pour être sûr)
+                    # Syntaxe SQLAlchemy générique pour JSON :
+                    attr_value = func.json_unquote(func.json_extract(Property.attributes, f'$.{key}'))
+                    relevance_score += case(
+                        (attr_value == str(value), 1),
+                        else_=0
+                    )
         except json.JSONDecodeError:
-             final_properties = candidate_properties
-    else:
-        final_properties = candidate_properties
+            pass
 
-    # 6. Pagination Manuelle
+    # --- 4. Tri et Pagination ---
+    
+    # Si des filtres dynamiques sont actifs, on trie par Score décroissant, puis par date
+    if filter_active:
+        # On ne garde que ceux qui ont au moins 1 point de pertinence (Optionnel, ou un seuil "Fuzzy")
+        # Ici on trie simplement par score.
+        query = base_query.order_by(desc(relevance_score), Property.created_at.desc())
+    else:
+        # Sinon tri par date classique
+        query = base_query.order_by(Property.created_at.desc())
+
+    # Pagination DB stricte
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+
+    # La méthode .paginate() fait un COUNT(*) optimisé puis un LIMIT/OFFSET
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     
-    total = len(final_properties)
-    start = (page - 1) * per_page
-    end = start + per_page
-    
-    sliced_properties = final_properties[start:end]
-    total_pages = (total + per_page - 1) // per_page
+    properties = pagination.items
 
     return jsonify({
-        'properties': [p.to_dict() for p in sliced_properties],
-        'total': total,
-        'pages': total_pages,
+        'properties': [p.to_dict() for p in properties],
+        'total': pagination.total,
+        'pages': pagination.pages,
         'current_page': page
     }), 200
 
