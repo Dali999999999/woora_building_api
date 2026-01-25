@@ -35,7 +35,7 @@ class User(db.Model):
     deletion_reason = db.Column(db.Text, nullable=True)
 
     # Verification logic
-    is_verified = db.Column(db.Boolean, default=True, nullable=False)
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
 
     # Relations (si un utilisateur est supprimé, toutes ses données associées le sont aussi)
     properties = db.relationship('Property', back_populates='owner', foreign_keys='Property.owner_id', cascade="all, delete-orphan")

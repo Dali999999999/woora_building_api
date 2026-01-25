@@ -23,7 +23,7 @@ def send_verification_email(email, code):
     msg = Message('Code de Vérification Woora Building',
                     sender=current_app.config['MAIL_DEFAULT_SENDER'],
                     recipients=[email])
-    msg.body = f'Votre code de vérification est : {code}. Ce code est valide pendant 60 secondes.'
+    msg.body = f'Votre code de vérification est : {code}. Ce code est valide pendant 10 minutes.'
     try:
         mail.send(msg)
         return True
@@ -32,60 +32,83 @@ def send_verification_email(email, code):
         return False
 
 def register_user_initiate(email, password, first_name, last_name, phone_number, role):
-    if User.query.filter_by(email=email).first():
+    user = User.query.filter_by(email=email).first()
+    
+    if user and user.is_verified:
         raise ValueError('Un utilisateur avec cet e-mail existe déjà.')
 
     # Logique spécifique pour la création d'un administrateur
     if role == 'admin':
         existing_admin = User.query.filter_by(role='admin').first()
         if existing_admin:
-            raise ValueError('Un compte administrateur existe déjà. La création de plusieurs administrateurs via cette route n\'est pas autorisée.')
+            raise ValueError('Un compte administrateur existe déjà.')
 
     hashed_password = generate_password_hash(password)
     verification_code = generate_verification_code()
-    expires_at = datetime.utcnow() + timedelta(minutes=10) # Code valide 10 minutes
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
 
-    user_data = {
-        'email': email,
-        'password_hash': hashed_password,
-        'first_name': first_name,
-        'last_name': last_name,
-        'phone_number': phone_number,
-        'role': role
-    }
+    # Si l'utilisateur existe mais n'est pas vérifié, on met à jour ses infos
+    if user and not user.is_verified:
+        user.password_hash = hashed_password
+        user.first_name = first_name
+        user.last_name = last_name
+        user.phone_number = phone_number
+        user.role = role
+        # On ne touche pas à visit_passes ici, on le fait à la vérification ou création
+    else:
+        # Création du nouvel utilisateur (non vérifié par défaut)
+        user = User(
+            email=email,
+            password_hash=hashed_password,
+            first_name=first_name,
+            last_name=last_name,
+            phone_number=phone_number,
+            role=role,
+            is_verified=False
+        )
+        db.session.add(user)
 
+    db.session.commit()
+
+    # On stocke le code en mémoire (ou idéalement en DB, mais on garde la structure actuelle)
+    # Note: Si le serveur redémarre, le code est perdu de la mémoire.
+    # Pour être robuste, on devrait stocker le code dans le User, mais sans changer le schéma DB,
+    # on continue d'utiliser _pending_registrations comme cache de validation.
     _pending_registrations[email] = {
-        'data': user_data,
         'code': verification_code,
         'expires_at': expires_at
     }
 
-    # Envoyer l\'e-mail de vérification
+    # Envoyer l'e-mail de vérification
     if not send_verification_email(email, verification_code):
-        # Gérer l\'échec de l\'envoi d\'e-mail si nécessaire
         pass
 
-    return True # Indique que l\'initiation de l\'inscription a réussi
-
+    return True
 
 def resend_verification_email_service(email):
     """
     Renvoyer un code de vérification à un utilisateur en attente de validation.
     """
-    if email not in _pending_registrations:
-        # On vérifie si l'utilisateur existe déjà (déjà vérifié ?)
-        user = User.query.filter_by(email=email).first()
-        if user:
-            raise ValueError("Ce compte est déjà vérifié. Veuillez vous connecter.")
+    user = User.query.filter_by(email=email).first()
+    
+    # Cas 1: Utilisateur déjà vérifié
+    if user and user.is_verified:
+        raise ValueError("Ce compte est déjà vérifié. Veuillez vous connecter.")
+    
+    # Cas 2: Utilisateur non trouvé du tout
+    if not user:
         raise ValueError("Aucune inscription en attente pour cet e-mail.")
 
-    # Générer un nouveau code
+    # Cas 3: Utilisateur existe et !is_verified (Inscription en cours)
+    # On génère un nouveau code
     new_code = generate_verification_code()
     new_expires_at = datetime.utcnow() + timedelta(minutes=10)
 
-    # Mettre à jour l'entrée existante
-    _pending_registrations[email]['code'] = new_code
-    _pending_registrations[email]['expires_at'] = new_expires_at
+    # On met à jour la mémoire
+    _pending_registrations[email] = {
+        'code': new_code,
+        'expires_at': new_expires_at
+    }
 
     # Renvoyer l'email
     if not send_verification_email(email, new_code):
@@ -93,11 +116,12 @@ def resend_verification_email_service(email):
     
     return True
 
-
-
 def verify_email_and_register(email, code):
+    # On vérifie d'abord la validité du code en mémoire
     if email not in _pending_registrations:
-        raise ValueError('Aucune inscription en attente pour cet e-mail.')
+        # Fallback: Si le serveur a redémarré, l'utilisateur est peut-être en DB mais le code est perdu.
+        # Dans ce cas, l'utilisateur doit demander un renvoi de code.
+        raise ValueError('Code expiré ou introuvable. Veuillez demander un nouveau code.')
 
     pending_reg = _pending_registrations[email]
 
@@ -105,35 +129,33 @@ def verify_email_and_register(email, code):
         raise ValueError('Code de vérification invalide.')
 
     if datetime.utcnow() > pending_reg['expires_at']:
-        del _pending_registrations[email] # Supprimer l'entrée expirée
+        del _pending_registrations[email]
         raise ValueError('Code de vérification expiré.')
 
-    # Créer l'utilisateur dans la base de données
-    user_data = pending_reg['data']
+    # Récupération de l'utilisateur en base
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        # Cas théoriquement impossible si register_user_initiate a bien commit
+        raise ValueError("Erreur critique: Utilisateur introuvable.")
+
+    if user.is_verified:
+        return user # Déjà fait
+
+    # Validation finale
+    user.is_verified = True
     
     # --- Logique d'attribution des pass de visite gratuits ---
-    if user_data['role'] == 'customer':
+    if user.role == 'customer':
         free_passes_setting = AppSetting.query.filter_by(setting_key='initial_free_visit_passes').first()
         if free_passes_setting:
-            user_data['visit_passes'] = int(free_passes_setting.setting_value)
-        else:
-            user_data['visit_passes'] = 0 # Par défaut, si le paramètre n'est pas trouvé
+            user.visit_passes = int(free_passes_setting.setting_value)
     # --- Fin de la logique ---
 
-    user = User(
-        email=user_data['email'],
-        password_hash=user_data['password_hash'],
-        first_name=user_data['first_name'],
-        last_name=user_data['last_name'],
-        phone_number=user_data['phone_number'],
-        role=user_data['role'],
-        visit_passes=user_data.get('visit_passes', 0) # Ajout du champ ici
-    )
-
-    db.session.add(user)
     db.session.commit()
 
-    del _pending_registrations[email] # Supprimer l'entrée après inscription réussie
+    # Nettoyage
+    if email in _pending_registrations:
+        del _pending_registrations[email]
 
     return user
 
