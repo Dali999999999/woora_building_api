@@ -454,6 +454,47 @@ def initiate_fedapay_payout(payout_request, payment_details):
         response.raise_for_status() # Lève une exception pour les codes d'erreur HTTP (4xx ou 5xx)
 
         fedapay_response = response.json()
+        payout_id = fedapay_response.get('v1/payout', {}).get('id') or fedapay_response.get('id')
+
+        if not payout_id:
+             current_app.logger.error(f"Impossible de récupérer l'ID du payout: {fedapay_response}")
+             return {'success': False, 'error': "Erreur API FedaPay (ID manquant)"}
+
+        # Étape 2: Démarrer le virement immédiatement
+        current_app.logger.info(f"=== DEMARRAGE DU VIREMENT (START) POUR ID {payout_id} ===")
+        start_payload = {"payouts": [{"id": payout_id, "send_now": True}]}
+        
+        try:
+            start_response = requests.put(
+                f'{fedapay_base_url}/payouts/start',
+                json=start_payload,
+                headers=headers,
+                timeout=30
+            )
+            
+            # Logger la réponse du Start
+            current_app.logger.info(f"Start Response Code: {start_response.status_code}")
+            try:
+                start_json = start_response.json()
+                current_app.logger.info(f"Start Response Body: {json.dumps(start_json, indent=2)}")
+            except:
+                current_app.logger.info(f"Start Response Text: {start_response.text}")
+
+            start_response.raise_for_status()
+            
+            # Si on arrive ici, le virement est bien parti
+            return {
+                'success': True,
+                'transaction_id': payout_id,
+                'reference': fedapay_response.get('reference'),
+                'status': 'processing', # On marque comme processing car envoyé
+                'full_response': fedapay_response
+            }
+
+        except requests.exceptions.HTTPError as start_err:
+             current_app.logger.error(f"Erreur lors du démarrage du virement: {start_err}")
+             return {'success': False, 'error': f"Virement créé mais échec de l'envoi: {start_err}", 'transaction_id': payout_id}
+
         
         # Le code de statut 201 (Created) indique que la requête de virement a été acceptée
         return {
