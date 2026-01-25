@@ -21,22 +21,22 @@ seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
 from sqlalchemy import or_
 import json
 
+from sqlalchemy.orm import selectinload # Optimization N+1
+
 @seekers_bp.route('/properties', methods=['GET'])
 @jwt_required()
 def get_all_properties_for_seeker():
     """
     Endpoint pour les chercheurs.
     Récupère les biens 'à vendre' ou 'à louer' avec filtrage avancé.
-    Paramètres GET supportés :
-    - search (text): Recherche dans titre, ville, adresse.
-    - min_price (number)
-    - max_price (number)
-    - property_type_id (int)
-    - filters (json string): Filtres dynamiques pour les attributs (ex: {"Piscine": "Oui"})
+    Optimisé avec selectinload pour les images.
     """
     
-    # 1. Base Query : Statut Actif ET Validé par l'admin ET Propriétaire non supprimé
-    query = Property.query.join(Property.owner).filter(
+    # 1. Base Query Optimisée : On pré-charge les images pour éviter le N+1
+    query = Property.query.options(
+        selectinload(Property.images),
+        selectinload(Property.property_type)
+    ).join(Property.owner).filter(
         Property.status.in_(['for_sale', 'for_rent']),
         Property.is_validated == True,
         User.deleted_at == None
@@ -129,8 +129,15 @@ def get_all_properties_for_seeker():
 def get_property_details_for_seeker(property_id):
     """
     Récupère les détails d'un bien immobilier spécifique.
+    Optimisé pour pré-charger les relations.
     """
-    property_obj = Property.query.get(property_id)
+    property_obj = Property.query.options(
+        selectinload(Property.images),
+        selectinload(Property.property_type),
+        selectinload(Property.owner),
+        selectinload(Property.agent)
+    ).get(property_id)
+    
     if not property_obj:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
     return jsonify(property_obj.to_dict()), 200
@@ -140,12 +147,13 @@ def get_property_details_for_seeker(property_id):
 def create_visit_request(property_id):
     """
     Permet à un client de soumettre une demande de visite.
-    Décrémente toujours un pass de visite.
-    Vérifie qu'un code de parrainage n'a pas déjà été utilisé pour ce bien par ce client.
-    Si un code est utilisé, il lie la demande à l'agent et le notifie.
+    **SÉCURISÉ** : Utilise with_for_update() pour verrouiller le compte utilisateur
+    et éviter le double-spending des pass de visite.
     """
     current_user_id = get_jwt_identity()
-    customer = User.query.get(current_user_id)
+    
+    # VERROUILLAGE PESSIMISTE : On bloque la ligne utilisateur jusqu'au commit/rollback
+    customer = User.query.with_for_update().get(current_user_id)
 
     if not customer:
         return jsonify({'message': "Utilisateur non trouvé."}), 404

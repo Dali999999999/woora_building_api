@@ -159,10 +159,17 @@ class Property(db.Model):
     latitude = db.Column(db.Numeric(9, 6))
     longitude = db.Column(db.Numeric(9, 6))
     attributes = db.Column(db.JSON)
-    is_validated = db.Column(db.Boolean, default=False)
     # Soft Delete for Property
     deleted_at = db.Column(db.DateTime, nullable=True)
     deletion_reason = db.Column(db.Text, nullable=True)
+
+    # INDEXES POUR LA PERFORMANCE
+    __table_args__ = (
+        db.Index('idx_property_status', 'status'),
+        db.Index('idx_property_price', 'price'),
+        db.Index('idx_property_city', 'city'),
+        db.Index('idx_property_type', 'property_type_id'),
+    )
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

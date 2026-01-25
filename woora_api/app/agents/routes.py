@@ -37,7 +37,8 @@ def get_all_properties_for_agent():
     per_page = request.args.get('per_page', 20, type=int)
 
     # On filtre les biens pour ne garder que ceux avec le statut 'for_sale' ou 'for_rent'.
-    query = Property.query.filter(
+    # OPTIMISATION : Pré-chargement des images
+    query = Property.query.options(selectinload(Property.images)).filter(
         Property.status.in_(['for_sale', 'for_rent'])
     )
     
@@ -67,7 +68,8 @@ def get_property_details_for_agent(property_id):
         return jsonify({'message': "Accès non autorisé."}), 403
 
     # On récupère le bien par son ID, sans vérifier le propriétaire
-    property = Property.query.get(property_id)
+    # OPTIMISATION
+    property = Property.query.options(selectinload(Property.images)).get(property_id)
     
     if not property:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
@@ -909,7 +911,7 @@ def get_agent_created_properties():
         return jsonify({'message': f"Accès non autorisé. Votre rôle est '{agent.role}', mais 'agent' est requis."}), 403
 
     # Récupérer toutes les propriétés créées par cet agent
-    properties = Property.query.filter_by(agent_id=current_user_id).all()
+    properties = Property.query.options(selectinload(Property.images), selectinload(Property.owner)).filter_by(agent_id=current_user_id).all()
     
     properties_with_details = []
     for prop in properties:
