@@ -753,13 +753,28 @@ def update_property_attribute(attribute_id):
     new_data_type = data.get('data_type')
 
     # 2. Vérification de sécurité : si on change le type de données
-    # La manière EFFICACE de vérifier si un attribut est utilisé est de
-    # regarder s'il est lié à un PropertyType, pas de scanner tous les biens.
+    # On NE BLOQUE que si des BIENS RÉELS utilisent cet attribut.
+    # La simple association à un PropertyType ne doit PAS bloquer la modification.
     if new_data_type and new_data_type != attr.data_type:
-        is_in_use = PropertyAttributeScope.query.filter_by(attribute_id=attr.id).first()
-        if is_in_use:
+        # Vérifier s'il existe des biens qui utilisent cet attribut
+        # On cherche dans la colonne JSON 'attributes' si la clé existe
+        from sqlalchemy import text
+        
+        # Compte le nombre de biens qui ont cet attribut dans leur JSON
+        count_query = text("""
+            SELECT COUNT(*) 
+            FROM Properties 
+            WHERE JSON_EXTRACT(attributes, :attr_path) IS NOT NULL
+        """)
+        
+        result = db.session.execute(
+            count_query, 
+            {'attr_path': f'$.{attr.name}'}
+        ).scalar()
+        
+        if result and result > 0:
             return jsonify({
-                'message': f"Impossible de changer le type de l'attribut '{attr.name}' car il est déjà associé à un type de bien."
+                'message': f"Impossible de changer le type de l'attribut '{attr.name}' car {result} bien(s) l'utilisent déjà. Vous devez d'abord supprimer ou modifier ces biens."
             }), 409 # 409 Conflict
 
     # 3. Validation : si on change le nom, s'assurer qu'il n'est pas déjà pris

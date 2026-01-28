@@ -95,4 +95,8 @@ def create_app():
     from app.search.routes import search_bp
     app.register_blueprint(search_bp)
 
+    # --- GEOCODING (GPS Autocomplete) ---
+    from app.geocoding.routes import geocoding_bp
+    app.register_blueprint(geocoding_bp)
+
     return app
