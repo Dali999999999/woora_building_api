@@ -142,25 +142,25 @@ def create_property():
         attributes=dynamic_attributes,
         is_validated=False
     )
-    current_app.logger.debug(f"Nouvelle propriété créée (avant commit): {new_property}")
-
-    db.session.add(new_property)
-    db.session.flush()
-    current_app.logger.debug(f"ID de la nouvelle propriété après flush: {new_property.id}")
-
-    image_urls = data.get('image_urls', [])
-    current_app.logger.debug(f"URLs d'images à enregistrer: {image_urls}")
-    if image_urls:
-        for i, image_url in enumerate(image_urls):
-            new_image = PropertyImage(
-                property_id=new_property.id,
-                image_url=image_url,
-                display_order=i
-            )
-            db.session.add(new_image)
-            current_app.logger.debug(f"Image ajoutée: {image_url}")
-
     try:
+        current_app.logger.debug(f"Nouvelle propriété créée (avant commit): {new_property}")
+
+        db.session.add(new_property)
+        db.session.flush()
+        current_app.logger.debug(f"ID de la nouvelle propriété après flush: {new_property.id}")
+
+        image_urls = data.get('image_urls', [])
+        current_app.logger.debug(f"URLs d'images à enregistrer: {image_urls}")
+        if image_urls:
+            for i, image_url in enumerate(image_urls):
+                new_image = PropertyImage(
+                    property_id=new_property.id,
+                    image_url=image_url,
+                    display_order=i
+                )
+                db.session.add(new_image)
+                current_app.logger.debug(f"Image ajoutée: {image_url}")
+
         db.session.commit()
         current_app.logger.info("Bien immobilier créé avec succès et commité.")
         return jsonify({'message': "Bien immobilier créé avec succès.", 'property': new_property.to_dict()}), 201
