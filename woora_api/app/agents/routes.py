@@ -39,7 +39,8 @@ def get_all_properties_for_agent():
     # On filtre les biens pour ne garder que ceux avec le statut 'for_sale' ou 'for_rent'.
     # OPTIMISATION : Pré-chargement des images
     query = Property.query.options(selectinload(Property.images)).filter(
-        Property.status.in_(['for_sale', 'for_rent'])
+        Property.status.in_(['for_sale', 'for_rent']),
+        Property.deleted_at == None
     )
     
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -71,7 +72,7 @@ def get_property_details_for_agent(property_id):
     # OPTIMISATION
     property = Property.query.options(selectinload(Property.images)).get(property_id)
     
-    if not property:
+    if not property or property.deleted_at:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
 
     # On utilise la méthode to_dict() pour une réponse cohérente
@@ -91,7 +92,7 @@ def create_or_get_referral_code(property_id):
 
     # Vérifier que le bien existe
     property_obj = Property.query.get(property_id)
-    if not property_obj:
+    if not property_obj or property_obj.deleted_at:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
 
     # Vérifier si un code existe déjà pour cet agent et ce bien

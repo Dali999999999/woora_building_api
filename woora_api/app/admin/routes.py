@@ -166,12 +166,25 @@ def delete_user(user_id):
     user.deleted_at = datetime.utcnow()
     user.deletion_reason = reason
     
+    # FIX: Anonymiser l'email pour libérer la contrainte d'unicité
+    # Cela permet à l'utilisateur de se réinscrire avec le même email plus tard
+    original_email = user.email
+    user.email = f"deleted_{int(datetime.utcnow().timestamp())}_{original_email}"
+
+    # FIX: Cascade Soft Delete -> Supprimer (soft) tous les biens de cet utilisateur
+    # On ne veut pas de biens orphelins "actifs" appartenant à un utilisateur supprimé
+    user_properties = Property.query.filter_by(owner_id=user.id).all()
+    for prop in user_properties:
+        if not prop.deleted_at: # Ne pas écraser si déjà supprimé
+            prop.deleted_at = datetime.utcnow()
+            prop.deletion_reason = f"Cascade: Propriétaire ({original_email}) supprimé par admin."
+    
     db.session.commit()
     
-    # Send Notification
-    send_account_deletion_email(user.email, user.first_name, reason)
+    # Send Notification (using original email)
+    send_account_deletion_email(original_email, user.first_name, reason)
 
-    return jsonify({'message': 'Utilisateur supprimé (Soft Delete) avec succès.'}), 200
+    return jsonify({'message': 'Utilisateur supprimé (Soft Delete) avec succès. Email anonymisé et biens supprimés.'}), 200
 
 # ------------- PROPRIÉTÉS -------------
 @admin_bp.route('/properties', methods=['GET'])
@@ -760,11 +773,12 @@ def update_property_attribute(attribute_id):
         # On cherche dans la colonne JSON 'attributes' si la clé existe
         from sqlalchemy import text
         
-        # Compte le nombre de biens qui ont cet attribut dans leur JSON
+        # Compte le nombre de biens (NON SUPPRIMÉS) qui ont cet attribut dans leur JSON
         count_query = text("""
             SELECT COUNT(*) 
             FROM Properties 
             WHERE JSON_EXTRACT(attributes, :attr_path) IS NOT NULL
+            AND deleted_at IS NULL
         """)
         
         result = db.session.execute(
@@ -795,7 +809,11 @@ def update_property_attribute(attribute_id):
         # Pour être sûr et compatible, on scanne les propriétés qui ont des attributs.
         # (Optimisation possible: faire une requête SQL native spécifique si bcp de données)
         
-        properties_using_attribute = Property.query.filter(Property.attributes.isnot(None)).all()
+        # FIX: Exclure les propriétés supprimées (Soft Delete)
+        properties_using_attribute = Property.query.filter(
+            Property.attributes.isnot(None), 
+            Property.deleted_at == None
+        ).all()
         for prop in properties_using_attribute:
              if isinstance(prop.attributes, dict) and attr.name in prop.attributes:
                  return jsonify({
