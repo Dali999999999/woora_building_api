@@ -47,7 +47,9 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
         
         # On libère aussi le numéro de téléphone au cas où (pour éviter confusion)
         if user.phone_number:
-             user.phone_number = f"{user.phone_number}_del_{timestamp}"
+            # Correction: Le champ phone_number est VARCHAR(20), on ne peut pas append trop de texte
+            # On remplace par un marqueur court "del_" + timestamp (ex: del_1700000000 = 14 chars)
+            user.phone_number = f"del_{timestamp}"
 
         db.session.commit()
         
