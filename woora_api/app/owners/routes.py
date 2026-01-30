@@ -179,7 +179,7 @@ def get_all_owner_properties(): # NOUVEAU NOM : get_ALL_owner_properties
         return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent voir leurs biens."}), 403
 
     # OPTIMISATION : Pré-chargement des images
-    properties = Property.query.options(selectinload(Property.images)).filter_by(owner_id=current_user_id).all()
+    properties = Property.query.options(selectinload(Property.images)).filter_by(owner_id=current_user_id).filter(Property.deleted_at == None).all()
     
     properties_with_images = []
     for prop in properties:
@@ -199,7 +199,7 @@ def get_owner_property_details(property_id): # NOUVEAU NOM (ou gardez celui-ci s
     if not owner or owner.role != 'owner':
         return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent voir les détails de leurs biens."}), 403
 
-    property = Property.query.options(selectinload(Property.images)).filter_by(id=property_id, owner_id=current_user_id).first()
+    property = Property.query.options(selectinload(Property.images)).filter_by(id=property_id, owner_id=current_user_id).filter(Property.deleted_at == None).first()
     if not property:
         return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas le propriétaire."}), 404
 

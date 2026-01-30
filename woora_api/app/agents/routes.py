@@ -952,7 +952,7 @@ def get_agent_created_properties():
         return jsonify({'message': f"Accès non autorisé. Votre rôle est '{agent.role}', mais 'agent' est requis."}), 403
 
     # Récupérer toutes les propriétés créées par cet agent
-    properties = Property.query.options(selectinload(Property.images), selectinload(Property.owner)).filter_by(agent_id=current_user_id).all()
+    properties = Property.query.options(selectinload(Property.images), selectinload(Property.owner)).filter_by(agent_id=current_user_id).filter(Property.deleted_at == None).all()
     
     properties_with_details = []
     for prop in properties:
