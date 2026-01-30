@@ -908,8 +908,7 @@ def create_property_for_agent():
         postal_code=postal_code,
         latitude=latitude,
         longitude=longitude,
-        attributes=dynamic_attributes,
-        is_validated=False
+        attributes=dynamic_attributes
     )
     try:
         current_app.logger.debug(f"Nouvelle propriété créée (avant commit): {new_property}")
