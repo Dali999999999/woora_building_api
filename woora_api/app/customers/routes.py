@@ -507,7 +507,7 @@ def get_all_properties_for_customer():
     if User.query.get(user_id).role != 'customer':
         return jsonify({'message': 'Accès refusé : customer requis.'}), 403
     from app.models import Property
-    return jsonify([p.to_dict() for p in Property.query.filter(Property.deleted_at == None).all()]), 200
+    return jsonify([p.to_dict() for p in Property.query.filter(Property.deleted_at == None, Property.is_validated == True).all()]), 200
 
 @customers_bp.route('/properties/<int:property_id>', methods=['GET'])
 @jwt_required()

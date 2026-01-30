@@ -177,6 +177,7 @@ class Property(db.Model):
         db.Index('idx_property_type', 'property_type_id'),
     )
 
+    is_validated = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -199,7 +200,7 @@ class Property(db.Model):
             'address': self.address, 'city': self.city, 'postal_code': self.postal_code,
             'latitude': float(self.latitude) if self.latitude is not None else None,
             'longitude': float(self.longitude) if self.longitude is not None else None,
-
+            'is_validated': self.is_validated,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -209,14 +209,9 @@ def validate_property(property_id):
         prop.attributes = new_attrs
 
     # TRIGGER MATCHING ENGINE ONLY IF NOT ALREADY VALIDATED
-    # TRIGGER MATCHING ENGINE
-    # Since 'is_validated' field is gone, we assume manual validation always triggers matching
-    should_run_matching = True
-    
-    # If we need to mark it as active, we should probably change status if it was not active
-    # prop.status = 'active' # Status enum specific?
-    # Valid statuses: 'for_sale', 'for_rent' etc. Model doesn't have 'active'.
-    # We leave status as is (e.g. for_sale) but matching runs.
+    # TRIGGER MATCHING ENGINE ONLY IF NOT ALREADY VALIDATED
+    should_run_matching = not prop.is_validated
+    prop.is_validated = True
 
     try:
         db.session.commit()
