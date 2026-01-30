@@ -30,6 +30,30 @@ def send_verification_email(email, code):
 def register_user_initiate(email, password, first_name, last_name, phone_number, role):
     user = User.query.filter_by(email=email).first()
     
+    # 1. GESTION DU SOFT DELETE : Libérer l'email si l'utilisateur est supprimé
+    if user and user.deleted_at is not None:
+        import time
+        timestamp = int(time.time())
+        # On anonymise l'ancien compte pour permettre la réinscription
+        # On garde une trace pour l'admin
+        anonymized_email = f"{user.email}.del.{timestamp}"
+        
+        # S'assurer que ça ne dépasse pas 191 chars
+        if len(anonymized_email) > 190:
+            anonymized_email = f"del.{timestamp}.{user.id}@woora.deleted"
+
+        current_app.logger.info(f"Anonymisation du compte supprimé {user.id} ({user.email}) -> {anonymized_email}")
+        user.email = anonymized_email
+        
+        # On libère aussi le numéro de téléphone au cas où (pour éviter confusion)
+        if user.phone_number:
+             user.phone_number = f"{user.phone_number}_del_{timestamp}"
+
+        db.session.commit()
+        
+        # On considère maintenant que l'utilisateur n'existe plus pour la suite de la logique
+        user = None
+
     if user and user.is_verified:
         raise ValueError('Un utilisateur avec cet e-mail existe déjà.')
 
