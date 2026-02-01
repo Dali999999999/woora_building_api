@@ -49,7 +49,7 @@ class User(db.Model):
     property_attributes = db.relationship('PropertyAttribute', back_populates='user', cascade="all, delete-orphan")
     referrals = db.relationship('Referral', back_populates='agent', cascade="all, delete-orphan")
     visit_requests = db.relationship('VisitRequest', back_populates='customer', cascade="all, delete-orphan")
-    property_requests = db.relationship('PropertyRequest', back_populates='customer', cascade="all, delete-orphan")
+    property_requests = db.relationship('PropertyRequest', back_populates='customer', foreign_keys='PropertyRequest.customer_id', cascade="all, delete-orphan")
     commissions_earned = db.relationship('Commission', back_populates='agent', cascade="all, delete-orphan")
     transactions = db.relationship('Transaction', back_populates='user', cascade="all, delete-orphan")
     payout_requests = db.relationship('PayoutRequest', back_populates='agent', cascade="all, delete-orphan")
