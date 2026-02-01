@@ -310,7 +310,7 @@ class PropertyRequest(db.Model):
     archived_at = db.Column(db.DateTime, nullable=True)
     archived_by = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True)
     
-    customer = db.relationship('User', back_populates='property_requests')
+    customer = db.relationship('User', back_populates='property_requests', foreign_keys=[customer_id])
     property_type = db.relationship('PropertyType', back_populates='property_requests')
 
     def to_dict(self):
