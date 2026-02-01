@@ -306,6 +306,10 @@ class PropertyRequest(db.Model):
     admin_notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Soft Delete (Archivage)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True)
+    
     customer = db.relationship('User', back_populates='property_requests')
     property_type = db.relationship('PropertyType', back_populates='property_requests')
 
@@ -318,6 +322,8 @@ class PropertyRequest(db.Model):
             'max_price': float(self.max_price) if self.max_price is not None else None,
             'status': self.status, 'admin_notes': self.admin_notes,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': self.archived_by,
             'customer': {
                 'id': self.customer.id,
                 'first_name': self.customer.first_name,

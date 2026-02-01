@@ -707,8 +707,20 @@ def mark_property_as_transacted(property_id):
 @admin_bp.route('/property_requests', methods=['GET'])
 # @jwt_required() et @admin_required
 def get_all_property_requests():
-    requests = PropertyRequest.query.order_by(PropertyRequest.created_at.desc()).all()
-    # Vous pouvez construire une réponse plus détaillée ici si nécessaire
+    """
+    Récupère les demandes de biens (alertes clients).
+    Par défaut, exclut les alertes archivées.
+    Utilisez ?include_archived=true pour inclure les archivées.
+    """
+    include_archived = request.args.get('include_archived', 'false').lower() == 'true'
+    
+    query = PropertyRequest.query
+    
+    # Filtrer les archivées par défaut
+    if not include_archived:
+        query = query.filter(PropertyRequest.archived_at == None)
+    
+    requests = query.order_by(PropertyRequest.created_at.desc()).all()
     return jsonify([req.to_dict() for req in requests]), 200 # Assurez-vous d'avoir une méthode to_dict() sur le modèle
 
 @admin_bp.route('/property_requests/<int:request_id>/respond', methods=['POST'])
@@ -747,6 +759,77 @@ def respond_to_property_request(request_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la réponse à une demande de bien: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur."}), 500
+
+@admin_bp.route('/property_requests/<int:request_id>/archive', methods=['PUT'])
+@jwt_required()
+def archive_property_request(request_id):
+    """
+    Archive une alerte client (PropertyRequest).
+    Seules les alertes avec statut 'contacted' ou 'closed' peuvent être archivées.
+    """
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé. Réservé aux administrateurs.'}), 403
+    
+    prop_request = PropertyRequest.query.get_or_404(request_id)
+    
+    # Vérifier que l'alerte peut être archivée
+    if prop_request.status not in ['contacted', 'closed']:
+        return jsonify({
+            'message': "Impossible d'archiver cette alerte. Seules les alertes 'contacted' ou 'closed' peuvent être archivées."
+        }), 400
+    
+    # Vérifier si déjà archivée
+    if prop_request.archived_at is not None:
+        return jsonify({'message': "Cette alerte est déjà archivée."}), 400
+    
+    try:
+        prop_request.archived_at = datetime.utcnow()
+        prop_request.archived_by = current_user_id
+        db.session.commit()
+        
+        return jsonify({
+            'message': "Alerte archivée avec succès.",
+            'request': prop_request.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de l'archivage de l'alerte: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur."}), 500
+
+@admin_bp.route('/property_requests/<int:request_id>/unarchive', methods=['PUT'])
+@jwt_required()
+def unarchive_property_request(request_id):
+    """
+    Désarchive (restaure) une alerte client archivée.
+    """
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé. Réservé aux administrateurs.'}), 403
+    
+    prop_request = PropertyRequest.query.get_or_404(request_id)
+    
+    # Vérifier si l'alerte est archivée
+    if prop_request.archived_at is None:
+        return jsonify({'message': "Cette alerte n'est pas archivée."}), 400
+    
+    try:
+        prop_request.archived_at = None
+        prop_request.archived_by = None
+        db.session.commit()
+        
+        return jsonify({
+            'message': "Alerte restaurée avec succès.",
+            'request': prop_request.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la restauration de l'alerte: {e}", exc_info=True)
         return jsonify({'message': "Erreur interne du serveur."}), 500
 
 
