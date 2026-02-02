@@ -974,6 +974,102 @@ def delete_property_attribute(attribute_id):
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
 
 
+@admin_bp.route('/properties/<int:property_id>', methods=['PUT', 'PATCH'])
+# @jwt_required() et @admin_required via before_request ou decorator global
+def update_property_by_admin(property_id):
+    """
+    Permet à un administrateur de modifier n'importe quel bien immobilier.
+    """
+    # Note: La vérification admin est supposée être gérée par le décorateur ou le blueprint
+
+    # Vérifier que le bien existe
+    property = Property.query.get_or_404(property_id)
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': "Corps de la requête manquant ou invalide."}), 400
+        
+    # --- LOGIQUE DE MISE À JOUR (Inspirée de agent/routes.py) ---
+
+    # 1. Mise à jour des champs directs si présents dans la racine du JSON
+    attributes_data = data.get('attributes', data) # Fallback sur data si attributes absent
+
+    if 'title' in attributes_data:
+        property.title = attributes_data['title']
+    
+    if 'price' in attributes_data:
+        try:
+            val = attributes_data['price']
+            property.price = float(val) if val is not None else None
+        except (ValueError, TypeError):
+            return jsonify({'message': "Le prix doit être un nombre valide."}), 400
+    
+    if 'status' in attributes_data:
+        # On accepte tous les statuts valides
+        property.status = attributes_data['status']
+        
+    if 'description' in attributes_data:
+        property.description = attributes_data.get('description')
+        
+    if 'address' in attributes_data:
+        property.address = attributes_data.get('address')
+        
+    if 'city' in attributes_data:
+        property.city = attributes_data.get('city')
+        
+    if 'postal_code' in attributes_data:
+        property.postal_code = attributes_data.get('postal_code')
+        
+    # Gestion des coordonnées GPS
+    if 'latitude' in attributes_data:
+        try:
+            val = attributes_data.get('latitude')
+            property.latitude = float(val) if val and str(val).lower() != 'null' else None
+        except (ValueError, TypeError):
+             return jsonify({'message': 'latitude invalide.'}), 400
+            
+    if 'longitude' in attributes_data:
+        try:
+            val = attributes_data.get('longitude')
+            property.longitude = float(val) if val and str(val).lower() != 'null' else None
+        except (ValueError, TypeError):
+             return jsonify({'message': 'longitude invalide.'}), 400
+
+    # 2. Mise à jour du champ JSON attributes (pour les champs dynamiques)
+    if attributes_data:
+        if property.attributes is None:
+            property.attributes = {}
+        
+        property.attributes.update(attributes_data)
+        flag_modified(property, "attributes")
+
+    # 3. Gestion des images
+    if 'image_urls' in data:
+        # Remplacement complet des images
+        PropertyImage.query.filter_by(property_id=property.id).delete()
+        db.session.flush()
+
+        image_urls = data.get('image_urls', [])
+        for i, image_url in enumerate(image_urls):
+            new_image = PropertyImage(
+                property_id=property.id,
+                image_url=image_url,
+                display_order=i
+            )
+            db.session.add(new_image)
+
+    try:
+        db.session.commit()
+        return jsonify({
+            'message': "Bien immobilier mis à jour avec succès par l'admin.",
+            'property': property.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur update admin property: {e}")
+        return jsonify({'message': "Erreur lors de la mise à jour."}), 500
+
+
 
 
 
