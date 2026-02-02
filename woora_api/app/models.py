@@ -157,7 +157,7 @@ class Property(db.Model):
     property_type_id = db.Column(db.Integer, db.ForeignKey('PropertyTypes.id', ondelete='RESTRICT'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    status = db.Column(db.Enum('for_sale', 'for_rent', 'sold', 'rented'), nullable=False)
+    status = db.Column(db.Enum('for_sale', 'for_rent', 'sold', 'rented', 'vefa', 'bailler', 'location_vente'), nullable=False)
     price = db.Column(db.Numeric(12, 2), nullable=False)
     address = db.Column(db.String(255))
     city = db.Column(db.String(100))

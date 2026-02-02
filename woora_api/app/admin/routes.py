@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, current_app
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 from app.models import (
     User, Property, PropertyType, PropertyAttribute, AttributeOption,
     PropertyAttributeScope, db, AppSetting, ServiceFee, VisitRequest,
