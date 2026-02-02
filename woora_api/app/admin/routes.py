@@ -25,19 +25,78 @@ if not os.path.exists(UPLOAD_FOLDER):
 # ------------- DASHBOARD -------------
 @admin_bp.route('/dashboard/stats', methods=['GET'])
 def get_dashboard_stats():
+    from sqlalchemy import func, extract
+    from datetime import datetime
+    
+    current_year = datetime.now().year
+    
+    # 1. Basic Counters
     user_count = User.query.count()
     property_count = Property.query.filter_by(status='active').count()
     pending_visits = VisitRequest.query.filter_by(status='pending').count()
     
-    # Calculate revenue from commissions
-    # Assuming Transaction model has amount and type='commission_payout' (checks code snippet above)
-    revenue = db.session.query(db.func.sum(Transaction.amount)).filter_by(type='commission_payout').scalar() or 0.0
+    # 2. Total Revenue (Transactions of type 'payment')
+    revenue = db.session.query(db.func.sum(Transaction.amount)).filter_by(type='payment').scalar() or 0.0
+
+    # 3. Monthly Revenue Chart (Current Year)
+    # Group by Month
+    revenue_results = db.session.query(
+        func.extract('month', Transaction.created_at).label('month'),
+        func.sum(Transaction.amount).label('total')
+    ).filter(
+        Transaction.type == 'payment',
+        func.extract('year', Transaction.created_at) == current_year
+    ).group_by('month').all()
+
+    # Format revenue data for all 12 months
+    revenue_chart = []
+    revenue_map = {int(r.month): float(r.total) for r in revenue_results}
+    month_names = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"]
+    
+    for i in range(1, 13):
+        revenue_chart.append({
+            "name": month_names[i-1],
+            "revenue": revenue_map.get(i, 0.0)
+        })
+
+    # 4. Monthly User Growth Chart (Clients vs Owners)
+    user_results = db.session.query(
+        func.extract('month', User.created_at).label('month'),
+        User.role,
+        func.count(User.id).label('count')
+    ).filter(
+        func.extract('year', User.created_at) == current_year,
+        User.role.in_(['customer', 'owner'])
+    ).group_by('month', User.role).all()
+
+    # Format user data
+    users_map = {} # { month_index: { 'clients': 0, 'owners': 0 } }
+    for r in user_results:
+        m = int(r.month)
+        if m not in users_map:
+            users_map[m] = {'clients': 0, 'owners': 0}
+        
+        if r.role == 'customer':
+            users_map[m]['clients'] = r.count
+        elif r.role == 'owner':
+            users_map[m]['owners'] = r.count
+            
+    user_growth_chart = []
+    for i in range(1, 13):
+        data = users_map.get(i, {'clients': 0, 'owners': 0})
+        user_growth_chart.append({
+            "name": month_names[i-1],
+            "clients": data['clients'],
+            "owners": data['owners']
+        })
 
     return jsonify({
         'total_users': user_count,
         'active_properties': property_count,
         'pending_visits': pending_visits,
-        'total_revenue': float(revenue)
+        'total_revenue': float(revenue),
+        'revenue_chart': revenue_chart,
+        'user_growth_chart': user_growth_chart
     })
 
 
