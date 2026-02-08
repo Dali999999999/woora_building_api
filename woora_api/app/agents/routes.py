@@ -840,80 +840,65 @@ def create_property_for_agent():
 
     status = dynamic_attributes.get('status')
     current_app.logger.debug(f"status brut: {status}, type: {type(status)}")
-    allowed_statuses = ['for_sale', 'for_rent', 'sold', 'rented']
-    if status not in allowed_statuses:
-        current_app.logger.warning(f"Validation échouée: status invalide. Reçu: {status}")
-        return jsonify({'message': f"status invalide. Doit être l'une des valeurs suivantes: {', '.join(allowed_statuses)}."}), 400
-
-    description = dynamic_attributes.get('description')
-    current_app.logger.debug(f"description brut: {description}, type: {type(description)}")
-    if description is not None and not isinstance(description, str):
-        current_app.logger.warning(f"Validation échouée: description doit être une chaîne de caractères. Reçu: {description}")
-        return jsonify({'message': "description doit être une chaîne de caractères."}), 400
-
-    address = dynamic_attributes.get('address')
-    current_app.logger.debug(f"address brut: {address}, type: {type(address)}")
-    if address is not None and not isinstance(address, str):
-        current_app.logger.warning(f"Validation échouée: address doit être une chaîne de caractères. Reçu: {address}")
-        return jsonify({'message': "address doit être une chaîne de caractères."}), 400
-
-    city = dynamic_attributes.get('city')
-    current_app.logger.debug(f"city brut: {city}, type: {type(city)}")
-    if city is not None and not isinstance(city, str):
-        current_app.logger.warning(f"Validation échouée: city doit être une chaîne de caractères. Reçu: {city}")
-        return jsonify({'message': "city doit être une chaîne de caractères."}), 400
-
-    postal_code = dynamic_attributes.get('postal_code')
-    current_app.logger.debug(f"postal_code brut: {postal_code}, type: {type(postal_code)}")
-    if postal_code is not None and not isinstance(postal_code, str):
-        current_app.logger.warning(f"Validation échouée: postal_code doit être une chaîne de caractères. Reçu: {postal_code}")
-        return jsonify({'message': "postal_code doit être une chaîne de caractères."}), 400
-
-    latitude = None
-    if 'latitude' in dynamic_attributes and dynamic_attributes['latitude'] is not None:
-        current_app.logger.debug(f"latitude brut: {dynamic_attributes['latitude']}, type: {type(dynamic_attributes['latitude'])}")
-        try:
-            latitude = float(dynamic_attributes['latitude'])
-            current_app.logger.debug(f"latitude converti: {latitude}, type: {type(latitude)}")
-        except (ValueError, TypeError):
-            current_app.logger.warning(f"Validation échouée: latitude doit être un nombre décimal valide. Reçu: {dynamic_attributes['latitude']}")
-            return jsonify({'message': "latitude doit être un nombre décimal valide."}), 400
-
-    longitude = None
-    if 'longitude' in dynamic_attributes and dynamic_attributes['longitude'] is not None:
-        current_app.logger.debug(f"longitude brut: {dynamic_attributes['longitude']}, type: {type(dynamic_attributes['longitude'])}")
-        try:
-            longitude = float(dynamic_attributes['longitude'])
-            current_app.logger.debug(f"longitude converti: {longitude}, type: {type(longitude)}")
-        except (ValueError, TypeError):
-            current_app.logger.warning(f"Validation échouée: longitude doit être un nombre décimal valide. Reçu: {dynamic_attributes['longitude']}")
-            return jsonify({'message': "longitude doit être un nombre décimal valide."}), 400
-
-    property_type = PropertyType.query.get(property_type_id)
-    if not property_type:
-        current_app.logger.warning(f"Validation échouée: Type de propriété invalide ou non trouvé. ID: {property_type_id}")
-        return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
-
-    # --- GESTION STATUT DYNAMIQUE ---
-    # Récupérer l'objet statut correspondant au code reçu ou mapping
-    status_mapping = {
-        'for_sale': 'À Vendre',
-        'for_rent': 'À Louer',
-        'vefa': 'VEFA',
-        'bailler': 'Bailler',
-        'location_vente': 'Location-vente',
-        'sold': 'Vendu',
-        'rented': 'Loué'
+    
+    # --- GESTION ROBUSTE DU STATUT (ID ou Code/Slug) ---
+    status_obj = None
+    final_status_slug = 'for_sale' # Valeur par défaut
+    
+    # Mapping inversé pour retrouver le slug à partir du nom (au cas où on reçoit le nom)
+    name_to_slug = {
+        'À Vendre': 'for_sale',
+        'À Louer': 'for_rent',
+        'VEFA': 'vefa',
+        'Bailler': 'bailler',
+        'Location-vente': 'location_vente',
+        'Vendu': 'sold',
+        'Loué': 'rented'
     }
+
+    if status:
+        # Cas 1: C'est un ID (entier ou chaîne numérique)
+        if isinstance(status, int) or (isinstance(status, str) and status.isdigit()):
+            status_id = int(status)
+            status_obj = PropertyStatus.query.get(status_id)
+            if status_obj:
+                # On essaie de retrouver le slug correspondant au nom
+                final_status_slug = name_to_slug.get(status_obj.name, 'for_sale')
+            else:
+                current_app.logger.warning(f"Status ID {status_id} non trouvé. Utilisation par défaut.")
+        
+        # Cas 2: C'est une chaîne (Slug ou Nom)
+        elif isinstance(status, str):
+            # Est-ce un slug connu ?
+            allowed_statuses = ['for_sale', 'for_rent', 'sold', 'rented', 'vefa', 'bailler', 'location_vente']
+            if status in allowed_statuses:
+                final_status_slug = status
+                # On cherche l'objet par nom via le mapping slug -> nom
+                slug_to_name = {v: k for k, v in name_to_slug.items()}
+                target_name = slug_to_name.get(status)
+                if target_name:
+                    status_obj = PropertyStatus.query.filter_by(name=target_name).first()
+            else:
+                # C'est peut-être le Nom direct ?
+                if status in name_to_slug:
+                    final_status_slug = name_to_slug[status]
+                    status_obj = PropertyStatus.query.filter_by(name=status).first()
+                else:
+                    current_app.logger.warning(f"Statut chaîne inconnu: {status}. Utilisation par défaut.")
     
-    # Le status reçu peut être l'ancien code (for_sale) ou le nouveau nom (À Vendre)
-    status_name = status_mapping.get(status, status) 
-    
-    status_obj = PropertyStatus.query.filter_by(name=status_name).first()
+    # Si on n'a toujours pas d'objet statut (cas slug sans objet en base ou défaut), on cherche le défaut
     if not status_obj:
-        # Fallback: Essayer de trouver 'À Vendre' par défaut si le statut est inconnu
-        status_obj = PropertyStatus.query.filter_by(name='À Vendre').first()
-        # Si toujours pas trouvé, on laisse status_id à None ou on gère l'erreur (ici soft fail)
+        slug_to_name = {v: k for k, v in name_to_slug.items()}
+        target_name = slug_to_name.get(final_status_slug, 'À Vendre')
+        status_obj = PropertyStatus.query.filter_by(name=target_name).first()
+        
+        if not status_obj:
+             # Safety net critique : créer le statut s'il manque en base
+             status_obj = PropertyStatus(name=target_name, color='#27AE60')
+             db.session.add(status_obj)
+             db.session.flush()
+
+    status = final_status_slug # On normalise 'status' pour qu'il soit toujours le slug
 
     # L'agent crée un bien pour lui-même, donc owner_id = agent_id = current_user_id
     new_property = Property(
