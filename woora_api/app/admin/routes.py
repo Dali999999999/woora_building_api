@@ -15,8 +15,71 @@ import uuid
 from decimal import Decimal
 from app.utils.email_utils import send_admin_rejection_notification, send_admin_confirmation_to_owner, send_admin_response_to_seeker
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime
+from sqlalchemy import inspect
+
+# Assurez-vous que le chemin vers vos utilitaires d'email est correct
+try:
+    from app.utils.email_utils import send_property_invalidation_notification, send_property_validation_notification
+except ImportError:
+    def send_property_invalidation_notification(*args, **kwargs): pass
+    def send_property_validation_notification(*args, **kwargs): pass
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+# ===================================================================
+# NOUVEL ENDPOINT POUR RÉCUPÉRER LES STATUTS DE PROPRIÉTÉ
+# ===================================================================
+
+@admin_bp.route('/property-statuses', methods=['GET'])
+@jwt_required()
+def get_property_statuses():
+    """
+    Récupère la liste de tous les statuts de propriété disponibles
+    depuis la définition ENUM de la base de données.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        
+        if not user or user.role != 'admin':
+            return jsonify({'message': 'Accès non autorisé.'}), 403
+        
+        # Récupérer les valeurs ENUM depuis la colonne status
+        inspector = inspect(db.engine)
+        columns = inspector.get_columns('properties') # Table name is 'properties' (lowercase)
+        status_column = next((col for col in columns if col['name'] == 'status'), None)
+        
+        if status_column and hasattr(status_column['type'], 'enums'):
+            enum_values = status_column['type'].enums
+        else:
+            # Fallback si l'inspection échoue
+            enum_values = ['for_sale', 'for_rent', 'sold', 'rented', 'vefa', 'bailler', 'location_vente']
+        
+        # Mapper les valeurs avec leurs labels français
+        status_mapping = {
+            'for_sale': 'À Vendre',
+            'for_rent': 'À Louer',
+            'vefa': 'VEFA',
+            'bailler': 'Bailler',
+            'location_vente': 'Location-vente',
+            'sold': 'Vendu',
+            'rented': 'Loué'
+        }
+        
+        statuses = [
+            {'value': value, 'label': status_mapping.get(value, value.capitalize())}
+            for value in enum_values
+        ]
+        
+        return jsonify(statuses), 200
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des statuts: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+# ===================================================================
+# ENDPOINTS EXISTANTS
+# ===================================================================
 
 UPLOAD_FOLDER = '/tmp'
 if not os.path.exists(UPLOAD_FOLDER):

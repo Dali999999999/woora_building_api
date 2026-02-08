@@ -98,5 +98,9 @@ def create_app():
     # --- GEOCODING (GPS Autocomplete) ---
     from app.geocoding.routes import geocoding_bp
     app.register_blueprint(geocoding_bp)
+    
+    # --- PROPERTIES (Liste des statuts) ---
+    from app.properties.routes import properties_bp
+    app.register_blueprint(properties_bp)
 
     return app

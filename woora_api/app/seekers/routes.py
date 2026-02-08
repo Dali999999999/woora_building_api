@@ -134,19 +134,30 @@ def get_all_properties_for_seeker():
 @jwt_required()
 def get_property_details_for_seeker(property_id):
     """
-    Récupère les détails d'un bien immobilier spécifique.
-    Optimisé pour pré-charger les relations.
+    Récupère les détails d'un bien immobilier pour un SEEKER.
+    PRIVACY: Exclut les informations sensibles (agent, owner) pour respecter
+    la politique de confidentialité - seul WOORA Building est l'intermédiaire.
     """
     property_obj = Property.query.options(
         selectinload(Property.images),
-        selectinload(Property.property_type),
-        selectinload(Property.owner),
-        selectinload(Property.agent)
+        selectinload(Property.property_type)
+        # NOTE: On ne charge PAS .owner ni .agent pour préserver la confidentialité
     ).get(property_id)
     
     if not property_obj:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
-    return jsonify(property_obj.to_dict()), 200
+    
+    # Récupérer les données du bien
+    property_dict = property_obj.to_dict()
+    
+    # SÉCURITÉ CRITIQUE: Supprimer toutes les informations sensibles
+    # Les clients ne doivent JAMAIS voir les coordonnées de l'agent ou du propriétaire
+    property_dict.pop('created_by_agent', None)
+    property_dict.pop('owner_details', None)
+    property_dict.pop('owner_id', None)
+    property_dict.pop('created_by', None)
+    
+    return jsonify(property_dict), 200
 
 @seekers_bp.route('/properties/<int:property_id>/visit-requests', methods=['POST'])
 @jwt_required()
