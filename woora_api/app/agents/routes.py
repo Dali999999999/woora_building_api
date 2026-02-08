@@ -838,6 +838,55 @@ def create_property_for_agent():
         current_app.logger.warning(f"Validation échouée: price doit être un nombre décimal valide. Reçu: {price}")
         return jsonify({'message': "price doit être un nombre décimal valide."}), 400
 
+    description = dynamic_attributes.get('description')
+    current_app.logger.debug(f"description brut: {description}, type: {type(description)}")
+    if description is not None and not isinstance(description, str):
+        current_app.logger.warning(f"Validation échouée: description doit être une chaîne de caractères. Reçu: {description}")
+        return jsonify({'message': "description doit être une chaîne de caractères."}), 400
+
+    address = dynamic_attributes.get('address')
+    current_app.logger.debug(f"address brut: {address}, type: {type(address)}")
+    if address is not None and not isinstance(address, str):
+        current_app.logger.warning(f"Validation échouée: address doit être une chaîne de caractères. Reçu: {address}")
+        return jsonify({'message': "address doit être une chaîne de caractères."}), 400
+
+    city = dynamic_attributes.get('city')
+    current_app.logger.debug(f"city brut: {city}, type: {type(city)}")
+    if city is not None and not isinstance(city, str):
+        current_app.logger.warning(f"Validation échouée: city doit être une chaîne de caractères. Reçu: {city}")
+        return jsonify({'message': "city doit être une chaîne de caractères."}), 400
+
+    postal_code = dynamic_attributes.get('postal_code')
+    current_app.logger.debug(f"postal_code brut: {postal_code}, type: {type(postal_code)}")
+    if postal_code is not None and not isinstance(postal_code, str):
+        current_app.logger.warning(f"Validation échouée: postal_code doit être une chaîne de caractères. Reçu: {postal_code}")
+        return jsonify({'message': "postal_code doit être une chaîne de caractères."}), 400
+
+    latitude = None
+    if 'latitude' in dynamic_attributes and dynamic_attributes['latitude'] is not None:
+        current_app.logger.debug(f"latitude brut: {dynamic_attributes['latitude']}, type: {type(dynamic_attributes['latitude'])}")
+        try:
+            latitude = float(dynamic_attributes['latitude'])
+            current_app.logger.debug(f"latitude converti: {latitude}, type: {type(latitude)}")
+        except (ValueError, TypeError):
+            current_app.logger.warning(f"Validation échouée: latitude doit être un nombre décimal valide. Reçu: {dynamic_attributes['latitude']}")
+            return jsonify({'message': "latitude doit être un nombre décimal valide."}), 400
+
+    longitude = None
+    if 'longitude' in dynamic_attributes and dynamic_attributes['longitude'] is not None:
+        current_app.logger.debug(f"longitude brut: {dynamic_attributes['longitude']}, type: {type(dynamic_attributes['longitude'])}")
+        try:
+            longitude = float(dynamic_attributes['longitude'])
+            current_app.logger.debug(f"longitude converti: {longitude}, type: {type(longitude)}")
+        except (ValueError, TypeError):
+            current_app.logger.warning(f"Validation échouée: longitude doit être un nombre décimal valide. Reçu: {dynamic_attributes['longitude']}")
+            return jsonify({'message': "longitude doit être un nombre décimal valide."}), 400
+
+    property_type = PropertyType.query.get(property_type_id)
+    if not property_type:
+        current_app.logger.warning(f"Validation échouée: Type de propriété invalide ou non trouvé. ID: {property_type_id}")
+        return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
+
     status = dynamic_attributes.get('status')
     current_app.logger.debug(f"status brut: {status}, type: {type(status)}")
     
