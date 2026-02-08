@@ -47,7 +47,7 @@ def get_property_statuses():
         
         # Récupérer les valeurs ENUM depuis la colonne status
         inspector = inspect(db.engine)
-        columns = inspector.get_columns('properties') # Table name is 'properties' (lowercase)
+        columns = inspector.get_columns('Properties')  # Table name is 'Properties' (capitalized)
         status_column = next((col for col in columns if col['name'] == 'status'), None)
         
         if status_column and hasattr(status_column['type'], 'enums'):
