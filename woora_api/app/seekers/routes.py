@@ -575,13 +575,13 @@ def submit_visit_request(property_id):
         # VALIDATION: Seuls les customers peuvent demander des visites
         user = User.query.get(user_id)
         if not user or user.role != 'customer':
-            return jsonify({'error': 'Seuls les clients peuvent demander des visites.'}), 403
+            return jsonify({"error": "Seuls les clients peuvent demander des visites."}), 403
         
         data = request.get_json()
         
         # Validation des données requises
         if not data or 'requested_datetime' not in data:
-            return jsonify({'error': 'La date et l'heure sont requises.'}), 400
+            return jsonify({"error": "La date et l'heure sont requises."}), 400
         
         # Vérifier que la propriété existe et est validée
         property_obj = Property.query.get(property_id)
