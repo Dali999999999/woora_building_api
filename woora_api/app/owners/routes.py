@@ -1,4 +1,4 @@
-```python
+
 # /opt/render/project/src/woora_api/app/owners/routes.py
 
 from flask import Blueprint, request, jsonify, current_app
