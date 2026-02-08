@@ -323,6 +323,17 @@ class VisitRequest(db.Model):
     property = db.relationship('Property', back_populates='visit_requests_received')
     referral = db.relationship('Referral', back_populates='visit_requests')
 
+class PropertyRequestMatch(db.Model):
+    __tablename__ = 'PropertyRequestMatches'
+    id = db.Column(db.Integer, primary_key=True)
+    property_request_id = db.Column(db.Integer, db.ForeignKey('PropertyRequests.id', ondelete='CASCADE'), nullable=False)
+    property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    property_request = db.relationship('PropertyRequest', back_populates='matches')
+    property = db.relationship('Property')
+
 class PropertyRequest(db.Model):
     __tablename__ = 'PropertyRequests'
     id = db.Column(db.Integer, primary_key=True)
@@ -342,8 +353,25 @@ class PropertyRequest(db.Model):
     
     customer = db.relationship('User', back_populates='property_requests', foreign_keys=[customer_id])
     property_type = db.relationship('PropertyType', back_populates='property_requests')
+    matches = db.relationship('PropertyRequestMatch', back_populates='property_request', cascade="all, delete-orphan", lazy='dynamic')
 
     def to_dict(self):
+        matches_count = self.matches.count() if self.id else 0
+        latest_matches = []
+        if self.id:
+            # Fetch last 5 matches for display
+            latest_matches_objs = self.matches.order_by(PropertyRequestMatch.created_at.desc()).limit(5).all()
+            for match in latest_matches_objs:
+                if match.property:
+                    latest_matches.append({
+                        'id': match.property.id,
+                        'title': match.property.title,
+                        'price': float(match.property.price) if match.property.price else 0,
+                        'city': match.property.city,
+                        'image_url': match.property.images[0].image_url if match.property.images else None,
+                        'is_read': match.is_read
+                    })
+
         return {
             'id': self.id, 'customer_id': self.customer_id, 'request_details': self.request_details,
             'city': self.city, 'property_type_id': self.property_type_id,
@@ -354,6 +382,8 @@ class PropertyRequest(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'archived_at': self.archived_at.isoformat() if self.archived_at else None,
             'archived_by': self.archived_by,
+            'matches_count': matches_count,
+            'matches': latest_matches,
             'customer': {
                 'id': self.customer.id,
                 'first_name': self.customer.first_name,

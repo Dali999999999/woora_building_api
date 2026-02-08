@@ -214,6 +214,14 @@ def create_property():
 
         db.session.commit()
         current_app.logger.info("Bien immobilier créé avec succès et commité.")
+
+        # TRIGGER MATCHING ENGINE
+        try:
+            from app.utils.matching_utils import find_matches_for_property
+            find_matches_for_property(new_property.id)
+        except Exception as e:
+            current_app.logger.error(f"Error running matching engine for owner property: {e}")
+
         return jsonify({'message': "Bien immobilier créé avec succès.", 'property': new_property.to_dict()}), 201
     except Exception as e:
         db.session.rollback()

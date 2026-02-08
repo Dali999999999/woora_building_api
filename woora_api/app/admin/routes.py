@@ -384,7 +384,6 @@ def validate_property(property_id):
         prop.attributes = new_attrs
 
     # TRIGGER MATCHING ENGINE ONLY IF NOT ALREADY VALIDATED
-    # TRIGGER MATCHING ENGINE ONLY IF NOT ALREADY VALIDATED
     should_run_matching = not prop.is_validated
     prop.is_validated = True
 
@@ -392,32 +391,12 @@ def validate_property(property_id):
         db.session.commit()
         
         if should_run_matching:
-            # 1. Find matching alerts (PropertyRequests)
-            # Criteria: Same Type AND (City matching OR Price in range)
-            matching_requests = PropertyRequest.query.filter(
-                PropertyRequest.property_type_id == prop.property_type_id,
-                PropertyRequest.status.in_(['new', 'in_progress'])
-            ).all()
-            
-            # Simple Python-side filtering for city (case-insensitive) and price logic to avoid complex hybrid SQL
-            for req in matching_requests:
-                # City check (if specified in request)
-                city_match = True
-                if req.city and prop.city:
-                    if req.city.lower() not in prop.city.lower():
-                        city_match = False
-                
-                # Price check
-                price_match = True
-                if prop.price:
-                     if req.min_price and prop.price < req.min_price: price_match = False
-                     if req.max_price and prop.price > req.max_price: price_match = False
-                
-                if city_match and price_match:
-                    # SEND NOTIFICATION
-                     seeker = User.query.get(req.customer_id)
-                     if seeker:
-                         send_alert_match_email(seeker.email, seeker.first_name, prop.title, prop.id)
+            # TRIGGER MATCHING ENGINE
+            try:
+                from app.utils.matching_utils import find_matches_for_property
+                find_matches_for_property(prop.id)
+            except Exception as e:
+                current_app.logger.error(f"Error running matching engine: {e}")
 
     except Exception as e:
         db.session.rollback()

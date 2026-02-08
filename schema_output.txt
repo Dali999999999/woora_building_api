@@ -1,0 +1,58 @@
+Connecting to database...
+Connected!
+Found 19 tables.
+Relevant tables found: ['PayoutRequests', 'PropertyRequestMatches', 'PropertyRequests', 'VisitRequests']
+
+--- Schema for PayoutRequests ---
+- id (int(11))
+- agent_id (int(11))
+- requested_amount (decimal(10,2))
+- actual_amount (decimal(10,2))
+- fedapay_transaction_id (varchar(100))
+- status (enum('pending','processing','completed','failed','cancelled'))
+- payment_method (varchar(50))
+- phone_number (varchar(20))
+- admin_notes (text)
+- error_message (text)
+- requested_at (datetime)
+- processed_at (datetime)
+- completed_at (datetime)
+
+--- Schema for PropertyRequestMatches ---
+- id (int(11))
+- property_request_id (int(11))
+- property_id (int(11))
+- is_read (tinyint(1))
+- created_at (datetime)
+
+--- Schema for PropertyRequests ---
+- id (int(11))
+- customer_id (int(11))
+- request_details (text)
+- city (varchar(100))
+- property_type_id (int(11))
+- min_price (decimal(12,2))
+- max_price (decimal(12,2))
+- status (enum('new','in_progress','contacted','closed'))
+- admin_notes (text)
+- created_at (datetime)
+- archived_at (datetime)
+- archived_by (int(11))
+
+--- Schema for VisitRequests ---
+- id (int(11))
+- customer_id (int(11))
+- property_id (int(11))
+- requested_datetime (datetime)
+- status (enum('pending','confirmed','accepted','rejected','completed'))
+- message (text)
+- created_at (datetime)
+- referral_id (int(11))
+
+--- Schema for Properties (Attributes check) ---
+- property_type_id (int(11))
+- status (enum('for_sale','for_rent','sold','rented','vefa','bailler','location_vente'))
+- price (decimal(12,2))
+- city (varchar(100))
+- attributes (longtext)
+- is_validated (tinyint(1))
