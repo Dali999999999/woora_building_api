@@ -914,8 +914,7 @@ def archive_property_request(request_id):
         db.session.commit()
         
         return jsonify({
-            'message': "Alerte archivée avec succès.",
-            'request': prop_request.to_dict()
+            'message': "Alerte archivée avec succès."
         }), 200
         
     except Exception as e:
@@ -1193,7 +1192,120 @@ def update_property_by_admin(property_id):
         return jsonify({'message': "Erreur lors de la mise à jour."}), 500
 
 
+# ===================================================================
+# GESTION DES DEMANDES DE VISITE - ADMIN
+# ===================================================================
+
+@admin_bp.route('/visit_requests', methods=['GET'])
+@jwt_required()
+def get_all_visit_requests_admin():
+    """
+    Récupère toutes les demandes de visite avec possibilité de filtrer par statut.
+    Accessible uniquement pour les administrateurs.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Accès non autorisé. Réservé aux administrateurs.'}), 403
+        
+        # Filtrage par statut (optionnel)
+        status_filter = request.args.get('status')
+        
+        query = VisitRequest.query
+        if status_filter and status_filter != 'all':
+            query = query.filter_by(status=status_filter)
+        
+        visit_requests = query.order_by(VisitRequest.created_at.desc()).all()
+        
+        result = []
+        for vr in visit_requests:
+            result.append({
+                'id': vr.id,
+                'property_id': vr.property_id,
+                'property_title': vr.property.title if vr.property else 'Titre indisponible',
+                'customer_id': vr.customer_id,
+                'customer_name': f"{vr.customer.first_name} {vr.customer.last_name}" if vr.customer else 'Client inconnu',
+                'customer_email': vr.customer.email if vr.customer else None,
+                'requested_datetime': vr.requested_datetime.isoformat() if vr.requested_datetime else None,
+                'status': vr.status,
+                'message': vr.message,
+                'created_at': vr.created_at.isoformat() if vr.created_at else None
+            })
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des demandes de visite (admin): {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
 
 
+@admin_bp.route('/visit_requests/<int:request_id>/confirm', methods=['PUT'])
+@jwt_required()
+def confirm_visit_request_admin(request_id):
+    """
+    Confirme une demande de visite (passe de 'pending' à 'confirmed').
+    Accessible uniquement pour les administrateurs.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Accès non autorisé. Réservé aux administrateurs.'}), 403
+        
+        visit_request = VisitRequest.query.get(request_id)
+        if not visit_request:
+            return jsonify({'error': 'Demande de visite non trouvée.'}), 404
+        
+        if visit_request.status != 'pending':
+            return jsonify({'error': f"Cette demande ne peut pas être confirmée car son statut est '{visit_request.status}'."}), 400
+        
+        visit_request.status = 'confirmed'
+        db.session.commit()
+        
+        current_app.logger.info(f"Demande de visite {request_id} confirmée par admin {current_user_id}")
+        
+        return jsonify({'message': 'Demande de visite confirmée avec succès.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la confirmation de la demande de visite (admin): {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
+
+
+@admin_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
+@jwt_required()
+def reject_visit_request_admin(request_id):
+    """
+    Rejette une demande de visite.
+    Accessible uniquement pour les administrateurs.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Accès non autorisé. Réservé aux administrateurs.'}), 403
+        
+        visit_request = VisitRequest.query.get(request_id)
+        if not visit_request:
+            return jsonify({'error': 'Demande de visite non trouvée.'}), 404
+        
+        data = request.get_json() or {}
+        rejection_message = data.get('message', 'Demande rejetée par l\'administrateur.')
+        
+        visit_request.status = 'rejected'
+        db.session.commit()
+        
+        current_app.logger.info(f"Demande de visite {request_id} rejetée par admin {current_user_id}")
+        
+        return jsonify({'message': 'Demande de visite rejetée avec succès.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors du rejet de la demande de visite (admin): {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
 
 

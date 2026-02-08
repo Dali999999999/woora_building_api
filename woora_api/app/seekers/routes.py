@@ -557,3 +557,129 @@ def get_agent_reviews_list(agent_id):
     """
     reviews = AgentReview.query.filter_by(agent_id=agent_id).order_by(AgentReview.created_at.desc()).all()
     return jsonify([r.to_dict() for r in reviews]), 200
+
+
+# ===================================================================
+# DEMANDES DE VISITE - SEEKER
+# ===================================================================
+
+@seekers_bp.route('/properties/<int:property_id>/visit-requests', methods=['POST'])
+@jwt_required()
+def submit_visit_request(property_id):
+    """
+    Permet à un seeker de soumettre une demande de visite pour un bien.
+    """
+    try:
+        user_id = get_jwt_identity()
+        
+        # VALIDATION: Seuls les customers peuvent demander des visites
+        user = User.query.get(user_id)
+        if not user or user.role != 'customer':
+            return jsonify({'error': 'Seuls les clients peuvent demander des visites.'}), 403
+        
+        data = request.get_json()
+        
+        # Validation des données requises
+        if not data or 'requested_datetime' not in data:
+            return jsonify({'error': 'La date et l'heure sont requises.'}), 400
+        
+        # Vérifier que la propriété existe et est validée
+        property_obj = Property.query.get(property_id)
+        if not property_obj:
+            return jsonify({'error': 'Propriété non trouvée.'}), 404
+        
+        if not property_obj.is_validated:
+            return jsonify({'error': 'Cette propriété n\'est pas encore validée.'}), 400
+        
+        # Vérifier que la propriété est disponible
+        if property_obj.status not in ['for_sale', 'for_rent', 'vefa', 'bailler', 'location_vente']:
+            return jsonify({'error': 'Cette propriété n\'est plus disponible.'}), 400
+        
+        # Parser la date/heure
+        try:
+            requested_dt = datetime.fromisoformat(data['requested_datetime'].replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            return jsonify({'error': 'Format de date invalide.'}), 400
+        
+        # Vérifier que la date est dans le futur
+        if requested_dt <= datetime.utcnow():
+            return jsonify({'error': 'La date doit être dans le futur.'}), 400
+        
+        # Vérifier le code de parrainage si fourni
+        referral_id = None
+        if data.get('referral_code'):
+            referral = Referral.query.filter_by(code=data['referral_code']).first()
+            if referral and referral.property_id == property_id:
+                referral_id = referral.id
+                # Notification à l'agent parrain
+                try:
+                    send_referral_used_notification(referral)
+                except Exception as e:
+                    current_app.logger.warning(f"Échec envoi email parrainage: {e}")
+        
+        # Créer la demande de visite
+        visit_request = VisitRequest(
+            customer_id=user_id,
+            property_id=property_id,
+            requested_datetime=requested_dt,
+            message=data.get('message'),
+            referral_id=referral_id,
+            status='pending'
+        )
+        
+        db.session.add(visit_request)
+        db.session.commit()
+        
+        # Notification au propriétaire
+        try:
+            send_new_visit_request_notification(visit_request)
+        except Exception as e:
+            current_app.logger.warning(f"Échec envoi email notification: {e}")
+        
+        current_app.logger.info(f"Demande de visite créée: {visit_request.id} pour propriété {property_id} par user {user_id}")
+        
+        return jsonify({
+            'message': 'Demande de visite envoyée avec succès.',
+            'visit_request_id': visit_request.id
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la création de la demande de visite: {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
+
+
+@seekers_bp.route('/visit_requests', methods=['GET'])
+@jwt_required()
+def get_my_visit_requests():
+    """
+    Récupère toutes les demandes de visite du seeker connecté.
+    """
+    try:
+        user_id = get_jwt_identity()
+        
+        # Récupérer toutes les demandes de l'utilisateur
+        visit_requests = VisitRequest.query\
+            .filter_by(customer_id=user_id)\
+            .order_by(VisitRequest.created_at.desc())\
+            .all()
+        
+        result = []
+        for vr in visit_requests:
+            result.append({
+                'id': vr.id,
+                'property_id': vr.property_id,
+                'property_title': vr.property.title if vr.property else 'Titre indisponible',
+                'property_address': vr.property.address if vr.property else None,
+                'property_city': vr.property.city if vr.property else None,
+                'requested_datetime': vr.requested_datetime.isoformat() if vr.requested_datetime else None,
+                'status': vr.status,
+                'message': vr.message,
+                'created_at': vr.created_at.isoformat() if vr.created_at else None
+            })
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la récupération des demandes de visite: {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
