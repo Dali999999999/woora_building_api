@@ -149,6 +149,22 @@ class PropertyAttributeScope(db.Model):
     attribute = db.relationship('PropertyAttribute', back_populates='scopes')
     property_type = db.relationship('PropertyType', back_populates='attribute_scopes')
 
+class PropertyStatus(db.Model):
+    __tablename__ = 'PropertyStatuses'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    color = db.Column(db.String(20), default='#000000')
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'color': self.color,
+            'description': self.description
+        }
+
 class Property(db.Model):
     __tablename__ = 'Properties'
     id = db.Column(db.Integer, primary_key=True)
@@ -157,7 +173,15 @@ class Property(db.Model):
     property_type_id = db.Column(db.Integer, db.ForeignKey('PropertyTypes.id', ondelete='RESTRICT'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    status = db.Column(db.Enum('for_sale', 'for_rent', 'sold', 'rented', 'vefa', 'bailler', 'location_vente'), nullable=False)
+    
+    # --- MODIFICATION STATUT DYNAMIQUE ---
+    # Ancien champ (optionnel de le garder ou le supprimer, ici on le garde en compatibilité mais non utilisé)
+    status = db.Column(db.String(50), nullable=True, default='for_sale') 
+    
+    # Nouveau champ FK
+    status_id = db.Column(db.Integer, db.ForeignKey('PropertyStatuses.id'), nullable=True)
+    property_status = db.relationship('PropertyStatus')
+    
     price = db.Column(db.Numeric(12, 2), nullable=False)
     address = db.Column(db.String(255))
     city = db.Column(db.String(100))
@@ -193,9 +217,15 @@ class Property(db.Model):
     commissions_paid = db.relationship('Commission', back_populates='property', cascade="all, delete-orphan")
 
     def to_dict(self):
+        # Récupérer l'objet statut lié
+        status_data = self.property_status.to_dict() if self.property_status else {
+            'id': 0, 'name': 'Statut Inconnu', 'color': '#808080'
+        }
+        
         base_data = {
             'id': self.id, 'owner_id': self.owner_id, 'agent_id': self.agent_id, 'property_type_id': self.property_type_id,
-            'title': self.title, 'description': self.description, 'status': self.status,
+            'title': self.title, 'description': self.description, 
+            'status': status_data, # Renvoie maintenant un OBJET complet {id, name, color}
             'price': float(self.price) if self.price is not None else None,
             'address': self.address, 'city': self.city, 'postal_code': self.postal_code,
             'latitude': float(self.latitude) if self.latitude is not None else None,

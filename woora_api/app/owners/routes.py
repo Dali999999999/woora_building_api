@@ -1,8 +1,9 @@
+```python
 # /opt/render/project/src/woora_api/app/owners/routes.py
 
 from flask import Blueprint, request, jsonify, current_app
 from app import db
-from app.models import Property, PropertyImage, User, PropertyType, VisitRequest,  PropertyAttributeScope, PropertyAttribute, AttributeOption
+from app.models import Property, PropertyImage, User, PropertyType, VisitRequest,  PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyStatus
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
@@ -127,12 +128,38 @@ def create_property():
         current_app.logger.warning(f"Validation échouée: Type de propriété invalide ou non trouvé. ID: {property_type_id}")
         return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
 
+    # --- GESTION STATUT DYNAMIQUE ---
+    # Récupérer l'objet statut correspondant au code reçu ou mapping
+    status_mapping = {
+        'for_sale': 'À Vendre',
+        'for_rent': 'À Louer',
+        'vefa': 'VEFA',
+        'bailler': 'Bailler',
+        'location_vente': 'Location-vente',
+        'sold': 'Vendu',
+        'rented': 'Loué'
+    }
+    
+    # Le status reçu peut être l'ancien code (for_sale) ou le nouveau nom (À Vendre)
+    status_name = status_mapping.get(status, status) 
+    
+    status_obj = PropertyStatus.query.filter_by(name=status_name).first()
+    if not status_obj:
+        # Fallback: Essayer de trouver 'À Vendre' par défaut si le statut est inconnu
+        status_obj = PropertyStatus.query.filter_by(name='À Vendre').first()
+        if not status_obj:
+            # Crise majeure: aucun statut en base. Créer statut par défaut (safety net)
+            status_obj = PropertyStatus(name='À Vendre', color='#27AE60')
+            db.session.add(status_obj)
+            db.session.flush()
+
     new_property = Property(
         owner_id=current_user_id,
         property_type_id=property_type_id,
         title=title,
         description=description,
         status=status,
+        status_id=status_obj.id if status_obj else None, # Lier l'ID du statut
         price=price,
         address=address,
         city=city,
@@ -247,6 +274,17 @@ def update_owner_property(property_id):
         
         if 'status' in attributes_data:
             property.status = attributes_data['status']
+            # Mise à jour du status_id
+            status_mapping = {
+                'for_sale': 'À Vendre', 'for_rent': 'À Louer', 'vefa': 'VEFA', 
+                'bailler': 'Bailler', 'location_vente': 'Location-vente', 
+                'sold': 'Vendu', 'rented': 'Loué'
+            }
+            status_name = status_mapping.get(property.status, property.status)
+            status_obj = PropertyStatus.query.filter_by(name=status_name).first()
+            if status_obj:
+                property.status_id = status_obj.id
+            # Sinon on garde l'ancien status_id ou on laisse null si introuvable (safe)
             
         if 'description' in attributes_data:
             property.description = attributes_data.get('description')

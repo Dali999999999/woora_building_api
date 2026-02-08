@@ -4,7 +4,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.models import (
     User, Property, PropertyType, PropertyAttribute, AttributeOption,
     PropertyAttributeScope, db, AppSetting, ServiceFee, VisitRequest,
-    Referral, Commission, Transaction, PropertyRequest
+    Referral, Commission, Transaction, PropertyRequest, PropertyStatus
 )
 from app.schemas import VisitSettingsSchema
 from marshmallow import ValidationError
@@ -35,8 +35,7 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 @jwt_required()
 def get_property_statuses():
     """
-    Récupère la liste de tous les statuts de propriété disponibles
-    depuis la définition ENUM de la base de données.
+    Récupère la liste de tous les statuts de propriété disponibles depuis la table PropertyStatuses.
     """
     try:
         current_user_id = get_jwt_identity()
@@ -45,37 +44,90 @@ def get_property_statuses():
         if not user or user.role != 'admin':
             return jsonify({'message': 'Accès non autorisé.'}), 403
         
-        # Récupérer les valeurs ENUM depuis la colonne status
-        inspector = inspect(db.engine)
-        columns = inspector.get_columns('Properties')  # Table name is 'Properties' (capitalized)
-        status_column = next((col for col in columns if col['name'] == 'status'), None)
-        
-        if status_column and hasattr(status_column['type'], 'enums'):
-            enum_values = status_column['type'].enums
-        else:
-            # Fallback si l'inspection échoue
-            enum_values = ['for_sale', 'for_rent', 'sold', 'rented', 'vefa', 'bailler', 'location_vente']
-        
-        # Mapper les valeurs avec leurs labels français
-        status_mapping = {
-            'for_sale': 'À Vendre',
-            'for_rent': 'À Louer',
-            'vefa': 'VEFA',
-            'bailler': 'Bailler',
-            'location_vente': 'Location-vente',
-            'sold': 'Vendu',
-            'rented': 'Loué'
-        }
-        
-        statuses = [
-            {'value': value, 'label': status_mapping.get(value, value.capitalize())}
-            for value in enum_values
-        ]
-        
-        return jsonify(statuses), 200
+        statuses = PropertyStatus.query.all()
+        return jsonify([s.to_dict() for s in statuses]), 200
     except Exception as e:
         current_app.logger.error(f"Erreur lors de la récupération des statuts: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
+
+@admin_bp.route('/property-statuses', methods=['POST'])
+@jwt_required()
+def create_property_status():
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        if not user or user.role != 'admin': return jsonify({'message': 'Accès non autorisé.'}), 403
+
+        data = request.get_json()
+        if not data or 'name' not in data:
+            return jsonify({'message': 'Le nom du statut est requis.'}), 400
+        
+        # Vérifier unicité
+        if PropertyStatus.query.filter_by(name=data['name']).first():
+             return jsonify({'message': 'Ce statut existe déjà.'}), 409
+
+        new_status = PropertyStatus(
+            name=data['name'],
+            color=data.get('color', '#000000'),
+            description=data.get('description', '')
+        )
+        db.session.add(new_status)
+        db.session.commit()
+        
+        return jsonify(new_status.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur création statut: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne.'}), 500
+
+@admin_bp.route('/property-statuses/<int:status_id>', methods=['PUT'])
+@jwt_required()
+def update_property_status(status_id):
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        if not user or user.role != 'admin': return jsonify({'message': 'Accès non autorisé.'}), 403
+
+        status_obj = PropertyStatus.query.get_or_404(status_id)
+        data = request.get_json()
+        
+        if 'name' in data:
+            existing = PropertyStatus.query.filter_by(name=data['name']).first()
+            if existing and existing.id != status_id:
+                return jsonify({'message': 'Ce nom de statut est déjà utilisé.'}), 409
+            status_obj.name = data['name']
+            
+        if 'color' in data: status_obj.color = data['color']
+        if 'description' in data: status_obj.description = data['description']
+        
+        db.session.commit()
+        return jsonify(status_obj.to_dict()), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur modif statut: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne.'}), 500
+
+@admin_bp.route('/property-statuses/<int:status_id>', methods=['DELETE'])
+@jwt_required()
+def delete_property_status(status_id):
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        if not user or user.role != 'admin': return jsonify({'message': 'Accès non autorisé.'}), 403
+
+        status_obj = PropertyStatus.query.get_or_404(status_id)
+        
+        # Vérifier si utilisé
+        if Property.query.filter_by(status_id=status_id).first():
+            return jsonify({'message': 'Impossible de supprimer: ce statut est utilisé par des biens.'}), 409
+            
+        db.session.delete(status_obj)
+        db.session.commit()
+        return jsonify({'message': 'Statut supprimé avec succès.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur suppression statut: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne.'}), 500
 
 # ===================================================================
 # ENDPOINTS EXISTANTS
@@ -95,7 +147,7 @@ def get_dashboard_stats():
     
     # 1. Basic Counters
     user_count = User.query.count()
-    property_count = Property.query.filter_by(status='active').count()
+    property_count = Property.query.count()  # Compte global
     pending_visits = VisitRequest.query.filter_by(status='pending').count()
     
     # 2. Total Revenue (Transactions of type 'payment')
