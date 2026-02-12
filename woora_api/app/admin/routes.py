@@ -713,27 +713,36 @@ def confirm_visit_request(request_id):
 @admin_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
 def reject_visit_request_by_admin(request_id):
     vr = VisitRequest.query.get_or_404(request_id)
-    if vr.status != 'pending':
-        return jsonify({'message': 'Pas en attente.'}), 400
+    
+    # MODIF: On autorise le rejet/annulation pour 'pending', 'confirmed' et 'accepted'
+    if vr.status not in ['pending', 'confirmed', 'accepted']:
+        return jsonify({'message': 'Impossible d\'annuler une visite déjà effectuée ou rejetée.'}), 400
+        
     vr.status = 'rejected'
-    msg = request.get_json().get('message', 'Rejet admin.')
+    msg = request.get_json().get('message', 'Annulation par l\'administrateur.')
+    
     try:
         # REMBOURSEMENT AUTOMATIQUE DU PASS
+        # Si le client a payé un pass (déduit à la création), on le rembourse
         if vr.customer_id:
             customer_to_refund = User.query.with_for_update().get(vr.customer_id)
             if customer_to_refund:
                 customer_to_refund.visit_passes += 1
-                current_app.logger.info(f"[ADMIN] Remboursement de 1 pass au client {customer_to_refund.id} suite au rejet de la visite {vr.id}")
+                current_app.logger.info(f"[ADMIN] Remboursement de 1 pass au client {customer_to_refund.id} suite au rejet/annulation de la visite {vr.id}")
 
         db.session.commit()
+        
+        # Notification
         customer = User.query.get(vr.customer_id)
         prop = Property.query.get(vr.property_id)
         if customer and prop:
             send_admin_rejection_notification(customer.email, prop.title, msg)
-        return jsonify({'message': 'Rejetée.'}), 200
+            
+        return jsonify({'message': 'Visite annulée/rejetée avec succès.'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'message': 'Erreur.'}), 500
+        current_app.logger.error(f"Erreur annulation visite admin: {e}")
+        return jsonify({'message': 'Erreur lors de l\'annulation.'}), 500
 
 # ------------- COMMISSION AGENT -------------
 @admin_bp.route('/settings/agent_commission', methods=['GET'])
