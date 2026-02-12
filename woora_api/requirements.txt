@@ -28,3 +28,6 @@ marshmallow>=3.20.0,<4.0.0
 # --- Librairies spécifiques au projet ---
 cloudinary>=1.36.0
 # mega.py et tenacity retirés (Migration Cloudinary)
+
+# --- Security ---
+Flask-Limiter>=3.5.0,<4.0.0  # Rate limiting to prevent brute-force attacks

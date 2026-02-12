@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, make_response
 from app.auth import services as auth_services
 from flask import current_app # Import added for logging
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token, create_refresh_token, set_access_cookies, set_refresh_cookies, unset_jwt_cookies
+from app import limiter  # Import limiter for rate limiting
 from app.models import User
 import random
 import string
@@ -18,6 +19,7 @@ UPLOAD_FOLDER = '/tmp'
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
+@limiter.limit("3 per minute")  # Security: Prevent spam registration
 def register():
     data = request.get_json()
     current_app.logger.debug(f'Données reçues pour l\'inscription: {data}')
@@ -76,6 +78,7 @@ def resend_verification_code():
         return jsonify({'message': 'Erreur interne du serveur.', 'error': str(e)}), 500
 
 @auth_bp.route('/login', methods=['POST'])
+@limiter.limit("5 per minute")  # Security: Prevent brute-force attacks
 def login():
     data = request.get_json()
     email = data.get('email')
@@ -164,6 +167,7 @@ def get_user_profile():
     return jsonify(user.to_dict()), 200
 
 @auth_bp.route('/forgot-password', methods=['POST'])
+@limiter.limit("3 per hour")  # Security: Prevent password reset spam
 def forgot_password():
     data = request.get_json()
     email = data.get('email')
