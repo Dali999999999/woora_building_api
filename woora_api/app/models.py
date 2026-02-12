@@ -170,7 +170,6 @@ class Property(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
     agent_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True)  # Agent qui a ajouté le bien
-    author_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True) # Ex-agent_id, for clarity if needed but let's stick to agent_id
     
     # --- AJOUT NOUVEAU CHAMP : BUYER_ID ---
     # Permet de savoir QUI a acheté ou loué le bien (historique des transactions)
