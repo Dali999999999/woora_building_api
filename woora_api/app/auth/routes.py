@@ -310,3 +310,80 @@ def upload_profile_picture():
         db.session.rollback()
         current_app.logger.error(f"Erreur d'upload de la photo de profil: {e}")
         return jsonify({'error': 'Erreur interne du serveur.'}), 500
+
+from app.models import VisitRequest, PropertyRequestMatch, PropertyRequest, Property, Referral
+
+@auth_bp.route('/notifications/summary', methods=['GET'])
+@jwt_required()
+def get_notifications_summary():
+    """
+    Récupère le résumé des notifications (badges) pour l'utilisateur connecté.
+    Retourne:
+    - pending_visits_count: Nombre de visites en attente (pour Agent/Owner).
+    - unread_alerts_count: Nombre de nouveaux biens correspondants (pour Seeker/Agent).
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    if not user:
+        return jsonify({'message': 'Utilisateur non trouvé.'}), 404
+        
+    response_data = {
+        'pending_visits_count': 0,
+        'unread_alerts_count': 0
+    }
+    
+    try:
+        # 1. BADGE VISITES (Pour Owners et Agents)
+        # Logique : Compter les demandes avec statut 'pending'
+        
+        if user.role == 'owner':
+            # Pour un Owner : toutes les demandes sur SES propriétés
+            pending_count = VisitRequest.query.join(Property).filter(
+                Property.owner_id == user.id,
+                VisitRequest.status == 'pending'
+            ).count()
+            response_data['pending_visits_count'] = pending_count
+            
+        elif user.role == 'agent':
+            # Pour un Agent : 
+            # A. Demandes sur ses propres propriétés (si agent est aussi "owner" technique de certains biens)
+            # B. Demandes via son code de parrainage (Referrals)
+            
+            # Approche A+B combinée via requête OR ou deux requêtes
+            # 1. Directement liées à l'agent via Referral
+            referral_pending = VisitRequest.query.join(Referral).filter(
+                Referral.agent_id == user.id,
+                VisitRequest.status == 'pending'
+            ).count()
+            
+            # 2. Liées à des propriétés créées par l'agent (agent_id sur Property)
+            direct_property_pending = VisitRequest.query.join(Property).filter(
+                Property.agent_id == user.id,
+                VisitRequest.status == 'pending'
+            ).count()
+            
+            # Note: Si un agent parraine sa propre propriété, éviter de compter double ?
+            # Simplification : On additionne pour l'instant, ou on fait une union si nécessaire.
+            # Pour l'instant, Woora distingue bien les deux flux.
+            response_data['pending_visits_count'] = referral_pending + direct_property_pending
+
+        # 2. BADGE ALERTES (Pour Seekers et Agents)
+        # Logique : Compter les matches non lus (is_read=False)
+        
+        if user.role in ['customer', 'agent']:
+            # Récupérer les ID des PropertyRequest de l'utilisateur
+            user_request_ids = [req.id for req in user.property_requests]
+            
+            if user_request_ids:
+                unread_count = PropertyRequestMatch.query.filter(
+                    PropertyRequestMatch.property_request_id.in_(user_request_ids),
+                    PropertyRequestMatch.is_read == False
+                ).count()
+                response_data['unread_alerts_count'] = unread_count
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors du calcul des notifications: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne lors du calcul des notifications.'}), 500

@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, current_app, request
-from app.models import Property, User, Referral, Commission, PropertyType, PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyImage, PropertyStatus
+from app.models import Property, User, Referral, Commission, PropertyType, PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyImage, PropertyStatus, PropertyRequest
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.utils.helpers import generate_unique_referral_code
 from app import db
@@ -797,7 +797,17 @@ def create_property_for_agent():
     data = request.get_json()
     import logging
     logging.getLogger().setLevel(logging.DEBUG)
-    logging.debug("🔍 Payload reçu : %s", data)
+    current_app.logger.debug("🔍 Payload reçu : %s", data)
+
+    # ... (code existant de create_property_for_agent non montré complètement dans le snippet précédent,
+    # mais je vais ajouter les nouvelles routes APRES, à la fin du fichier, ce qui est plus sûr)
+    # ATTENTION: Le snippet précédent s'arrêtait à la ligne 800. Je vais utiliser "write_to_file" en append
+    # ou "replace_file_content" ciblant la fin, mais je ne connais pas la dernière ligne exacte.
+    # Strategie: Je vais remplacer le bloc 786-800 et AJOUTER les nouvelles routes juste AVANT ce bloc
+    # car je connais le contenu exact de ce bloc.
+    # Non, mauvaise idée. Le fichier fait 1225 lignes.
+    # Je vais plutot faire un `view_file` de la fin du fichier pour être sûr de l'endroit où ajouter.
+
     current_app.logger.debug(f"JSON brut reçu: {data}")
 
     required_top_level_fields = ['image_urls', 'attributes']
@@ -1222,3 +1232,76 @@ def get_agent_created_property_details(property_id):
     property_dict = property.to_dict()
     property_dict['image_urls'] = [img.image_url for img in property.images] 
     return jsonify(property_dict), 200
+
+# ==============================================================================
+# GESTION DES REQUÊTES / ALERTES PROPRIÉTÉS POUR AGENTS
+# ==============================================================================
+
+@agents_bp.route('/property-requests', methods=['POST'])
+@jwt_required()
+def create_agent_property_request():
+    """
+    Permet à un AGENT de soumettre une alerte / demande de bien.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès refusé. Seuls les agents peuvent créer des alertes ici."}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': "Données manquantes."}), 400
+
+    # 1. On récupère la chaîne de caractères JSON
+    request_details_str = data.get('request_details', '{}')
+    try:
+        # 2. On la décode pour la transformer en dictionnaire Python
+        request_values = json.loads(request_details_str)
+    except json.JSONDecodeError:
+        return jsonify({'message': "Le format des détails de la requête est invalide."}), 400
+
+    # 3. On extrait les valeurs pour les colonnes structurées
+    city = request_values.get('city')
+    min_price = request_values.get('min_price')
+    max_price = request_values.get('max_price')
+
+    # 4. On crée l'objet PropertyRequest
+    # On réutilise la colonne customer_id pour l'ID de l'agent (car User table unifiée)
+    new_request = PropertyRequest(
+        customer_id=current_user_id,
+        property_type_id=data.get('property_type_id'),
+        
+        city=city,
+        min_price=min_price,
+        max_price=max_price,
+        
+        request_details=request_details_str, 
+        
+        status='new'
+    )
+
+    try:
+        db.session.add(new_request)
+        db.session.commit()
+        return jsonify({'message': "Alerte agent enregistrée avec succès."}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur création alerte agent: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur."}), 500
+
+@agents_bp.route('/property-requests', methods=['GET'])
+@jwt_required()
+def get_agent_property_requests():
+    """
+    Récupère l'historique des alertes pour l'agent connecté.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    requests = PropertyRequest.query.filter_by(customer_id=current_user_id).order_by(PropertyRequest.created_at.desc()).all()
+    
+    return jsonify([req.to_dict() for req in requests]), 200

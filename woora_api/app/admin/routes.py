@@ -406,7 +406,7 @@ def validate_property(property_id):
     return jsonify({'message': f"Bien '{prop.title}' validé avec succès.", 'property': prop.to_dict()}), 200
 
 from app.models import Property, PropertyImage, User, PropertyType, VisitRequest,  PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyRequest
-from app.utils.email_utils import send_admin_response_to_seeker, send_property_invalidation_email, send_alert_match_email
+from app.utils.email_utils import send_admin_response_to_seeker, send_property_invalidation_email, send_alert_match_email, send_commission_paid_notification, send_deal_closed_client_notification
 
 # ... (other code)
 
@@ -788,70 +788,171 @@ def get_eligible_buyers_for_property(property_id):
 @admin_bp.route('/properties/<int:property_id>/mark_as_transacted', methods=['PUT'])
 # @jwt_required() # Assurez-vous que cette route est protégée
 # @admin_required # Et accessible uniquement par les admins
+# --- GESTION DES VISITES EFFECTUÉES ET TRANSACTION ---
+
+@admin_bp.route('/visit_requests/<int:visit_id>/complete', methods=['PUT'])
+# @admin_required
+def mark_visit_as_completed(visit_id):
+    """
+    Marque une visite comme 'effectuée' (completed).
+    Cela permet ensuite de sélectionner ce client comme acquéreur.
+    """
+    visit = VisitRequest.query.get_or_404(visit_id)
+    if visit.status != 'accepted':
+        return jsonify({'message': "Seule une visite 'acceptée' peut être marquée comme effectuée."}), 400
+    
+    visit.status = 'completed'
+    db.session.commit()
+    return jsonify({'message': "Visite marquée comme effectuée.", 'visit': visit.to_dict()}), 200
+
+@admin_bp.route('/properties/<int:property_id>/eligible_buyers', methods=['GET'])
+# @admin_required
+def get_eligible_buyers(property_id):
+    """
+    Récupère la liste des utilisateurs ayant effectué au moins une visite (status='completed')
+    pour ce bien. Indique si le client a un parrainage valide (basé sur sa 1ère demande).
+    """
+    # On cherche les visites effectuées pour ce bien
+    completed_visits = VisitRequest.query.filter_by(property_id=property_id, status='completed').all()
+    
+    # On extrait les IDs utilisateurs uniques
+    buyer_ids = set(v.customer_id for v in completed_visits)
+    
+    buyers_data = []
+    for user_id in buyer_ids:
+        user = User.query.get(user_id)
+        if not user:
+            continue
+            
+        # RÈGLE DU "STICKY REFERRAL" :
+        # On cherche la TOUTE PREMIÈRE demande de ce client pour ce bien
+        first_request = VisitRequest.query.filter_by(
+            customer_id=user_id,
+            property_id=property_id
+        ).order_by(VisitRequest.created_at.asc()).first()
+        
+        has_referral = False
+        referral_agent_name = None
+        
+        if first_request and first_request.referral_id:
+            has_referral = True
+            if first_request.referral and first_request.referral.agent:
+                referral_agent_name = f"{first_request.referral.agent.first_name} {first_request.referral.agent.last_name}"
+        
+        buyers_data.append({
+            'user_id': user.id,
+            'user_name': f"{user.first_name} {user.last_name}",
+            'email': user.email,
+            'has_referral': has_referral,
+            'referral_agent_name': referral_agent_name,
+            'first_visit_date': first_request.created_at.isoformat() if first_request else None
+        })
+        
+    return jsonify(buyers_data), 200
+
+@admin_bp.route('/properties/<int:property_id>/mark_as_transacted', methods=['PUT'])
+# @admin_required # Et accessible uniquement par les admins
 def mark_property_as_transacted(property_id):
     """
-    Marque un bien comme 'vendu' ou 'loué' et génère la commission
-    de l'agent parrain, le cas échéant.
+    Marque un bien comme 'vendu' ou 'loué' basé sur l'ACHETEUR (User).
+    Vérifie si la PREMIÈRE demande de cet acheteur avait un parrainage pour payer la commission.
     """
     data = request.get_json()
     new_status = data.get('status')
-    winning_visit_id = data.get('winning_visit_request_id')
+    buyer_id = data.get('buyer_id') # On attend maintenant l'ID de l'acheteur (User)
 
     if new_status not in ['sold', 'rented']:
         return jsonify({'message': 'Le statut doit être "sold" ou "rented".'}), 400
 
+    if not buyer_id:
+        return jsonify({'message': 'Un acheteur (User ID) doit être spécifié.'}), 400
+
     prop = Property.query.get_or_404(property_id)
     prop.status = new_status
-    prop.winning_visit_request_id = winning_visit_id
+    
+    # --- SAUVEGARDE DE L'ACHETEUR ---
+    # Maintenant que le modèle Property a un champ buyer_id, on le stocke.
+    prop.buyer_id = buyer_id
 
-    # Si une visite gagnante est spécifiée, on traite la commission
-    if winning_visit_id:
-        vr = VisitRequest.query.get(winning_visit_id)
-        if not vr or vr.property_id != property_id:
-            return jsonify({'message': 'ID de la demande de visite invalide ou ne correspondant pas au bien.'}), 400
+    # --- LOGIQUE DE COMMISSION (STICKY REFERRAL) ---
+    # On récupère la TOUTE PREMIÈRE demande de cet acheteur pour ce bien
+    first_request = VisitRequest.query.filter_by(
+        customer_id=buyer_id,
+        property_id=property_id
+    ).order_by(VisitRequest.created_at.asc()).first()
+    
+    agent_to_pay = None
+    
+    if first_request and first_request.referral_id:
+        ref = Referral.query.get(first_request.referral_id)
+        if ref and ref.agent_id:
+            agent_to_pay = User.query.get(ref.agent_id)
+
+    # Si un agent doit être payé (Parrainage à la première demande)
+    if agent_to_pay and agent_to_pay.role == 'agent':
+        # SÉCURITÉ : Verrouillage pour mise à jour solde
+        agent = User.query.with_for_update().get(agent_to_pay.id)
         
-        if vr.referral_id:
-            ref = Referral.query.get(vr.referral_id)
-            if ref and ref.agent_id:
-                # SÉCURITÉ : Verrouillage du compte agent pour la mise à jour du solde
-                agent = User.query.with_for_update().get(ref.agent_id)
-                if agent and agent.role == 'agent':
-                    # Récupérer le pourcentage de commission depuis les paramètres
-                    commission_setting = AppSetting.query.filter_by(setting_key='agent_commission_percentage').first()
-                    # Utiliser une valeur par défaut de 5.0 si le paramètre n'existe pas
-                    pct_str = commission_setting.setting_value if commission_setting else "5.0"
-                    
-                    # --- DÉBUT DE LA CORRECTION ---
-                    try:
-                        # Convertir le prix (Decimal) et le pourcentage (String) en Decimal pour le calcul
-                        price_decimal = Decimal(prop.price)
-                        pct_decimal = Decimal(pct_str)
-                        
-                        # Calculer la commission en utilisant uniquement des Decimals
-                        commission_amount = (price_decimal * pct_decimal) / Decimal(100)
-                        
-                        # Arrondir au centime le plus proche
-                        commission_amount = round(commission_amount, 2)
+        # Récupérer le pourcentage
+        commission_setting = AppSetting.query.filter_by(setting_key='agent_commission_percentage').first()
+        pct_str = commission_setting.setting_value if commission_setting else "5.0"
+        
+        try:
+            price_decimal = Decimal(prop.price)
+            pct_decimal = Decimal(pct_str)
+            commission_amount = (price_decimal * pct_decimal) / Decimal(100)
+            commission_amount = round(commission_amount, 2)
+            
+            # 1. Créer la commission
+            db.session.add(Commission(agent_id=agent.id, property_id=prop.id, amount=commission_amount, status='paid'))
+            
+            # 2. Update Wallet
+            if agent.wallet_balance is None:
+                agent.wallet_balance = Decimal(0)
+            agent.wallet_balance += commission_amount
+            
+            # 3. Transaction Record
+            db.session.add(Transaction(
+                user_id=agent.id, 
+                amount=commission_amount, 
+                type='commission_payout',
+                description=f'Commission pour la transaction du bien: {prop.title} (Acheteur: User #{buyer_id})'
+            ))
+            
+            # 4. Notification Agent
+            try:
+                send_commission_paid_notification(
+                    agent_email=agent.email,
+                    agent_name=f"{agent.first_name} {agent.last_name}",
+                    amount=f"{commission_amount:,.0f}".replace(",", " "),
+                    property_title=prop.title
+                )
+            except Exception as e:
+                current_app.logger.warning(f"Échec envoi email commission: {e}")
 
-                    except (TypeError, ValueError):
-                        current_app.logger.error("La valeur du pourcentage de commission est invalide.")
-                        return jsonify({'message': 'Erreur de configuration du pourcentage de commission.'}), 500
-                    # --- FIN DE LA CORRECTION ---
+        except Exception as e:
+            current_app.logger.error(f"Erreur calcul commission: {e}")
+            return jsonify({'message': 'Erreur lors du calcul de la commission.'}), 500
 
-                    # Ajouter la commission à la base de données
-                    db.session.add(Commission(agent_id=agent.id, property_id=prop.id, amount=commission_amount, status='paid'))
-                    
-                    # Mettre à jour le portefeuille de l'agent
-                    if agent.wallet_balance is None:
-                        agent.wallet_balance = Decimal(0)
-                    agent.wallet_balance += commission_amount
-                    
-                    # Enregistrer la transaction
-                    db.session.add(Transaction(user_id=agent.id, amount=commission_amount, type='commission_payout',
-                                               description=f'Commission pour la transaction du bien: {prop.title}'))
+    # --- NOTIFICATION CLIENT (Deal Closed) ---
+    buyer = User.query.get(buyer_id)
+    if buyer:
+         try:
+             # On demande un avis sur l'agent SI l'agent a été payé
+             agent_id_for_review = agent_to_pay.id if agent_to_pay else None
+
+             send_deal_closed_client_notification(
+                 customer_email=buyer.email,
+                 customer_name=f"{buyer.first_name} {buyer.last_name}",
+                 property_title=prop.title,
+                 agent_id=agent_id_for_review
+             )
+         except Exception as e:
+             current_app.logger.warning(f"Échec envoi email client (deal closed): {e}")
+
     try:
         db.session.commit()
-        return jsonify({'message': f'Le bien a été marqué comme "{new_status}".', 'property': prop.to_dict()}), 200
+        return jsonify({'message': f"Bien marqué comme {new_status}.", 'property': prop.to_dict()}), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur lors du marquage comme 'transacted': {e}", exc_info=True)

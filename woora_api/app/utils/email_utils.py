@@ -109,6 +109,39 @@ def send_admin_rejection_notification(customer_email, property_title, message):
         current_app.logger.error(f"Erreur lors de l'envoi de l'email de rejet admin: {e}", exc_info=True)
         return False
 
+def send_visit_request_confirmation_to_customer(customer_email, customer_name, property_title, requested_datetime):
+    subject = f'Confirmation de votre demande de visite - {property_title}'
+    
+    body_html = f"""
+        <p>Bonjour {customer_name},</p>
+        <p>Nous confirmons la réception de votre demande de visite pour le bien <strong>"{property_title}"</strong>.</p>
+        
+        <h3>Détails de votre demande :</h3>
+        <ul>
+            <li><strong>Date et Heure Souhaitées :</strong> {requested_datetime}</li>
+            <li><strong>Statut actuel :</strong> En attente de validation</li>
+        </ul>
+        
+        <p>Nous avons notifié le propriétaire et l'administrateur. Vous recevrez une notification dès que votre demande sera traitée.</p>
+        <p>Merci de votre confiance !</p>
+        <p>Cordialement,<br>L'équipe WOORA BUILDING</p>
+    """
+
+    msg = Message(
+        subject,
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[customer_email],
+        html=get_email_template("Demande de visite enregistrée", body_html)
+    )
+    
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email de confirmation envoyé au client {customer_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de l'envoi de l'email de confirmation au client: {e}", exc_info=True)
+        return False
+
 def send_property_invalidation_email(owner_email, property_title, reason):
     subject = f'Attention requise : {property_title}'
     
@@ -344,3 +377,77 @@ def send_admin_response_to_seeker(customer_email, customer_name, original_reques
     except Exception as e:
         current_app.logger.error(f"Échec de l'envoi de l'email de réponse à l'alerte pour {customer_email}: {e}", exc_info=True)
         return False
+
+def send_commission_paid_notification(agent_email, agent_name, amount, property_title):
+    subject = "Félicitations ! Commission Reçue 💰"
+    
+    body_html = f"""
+        <p>Bonjour {agent_name},</p>
+        <p>Excellente nouvelle ! Une transaction a été finalisée grâce à votre parrainage.</p>
+        
+        <div style="background-color: #e8f8f5; border-left: 4px solid #2ecc71; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 18px;">Vous avez reçu une commission de :</p>
+            <h2 style="color: #27ae60; margin: 10px 0;">{amount} FCFA</h2>
+            <p style="margin: 0;">Pour le bien : <strong>{property_title}</strong></p>
+        </div>
+        
+        <p>Ce montant a été crédité sur votre portefeuille <strong>WOORA BUILDING</strong>.</p>
+        <p>Continuez votre excellent travail !</p>
+        <p>Cordialement,<br>L'équipe WOORA BUILDING</p>
+    """
+
+    msg = Message(
+        subject,
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[agent_email],
+        html=get_email_template("Commission Reçue", body_html)
+    )
+
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email de commission envoyé à {agent_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur envoi email commission: {e}")
+        return False
+
+def send_deal_closed_client_notification(customer_email, customer_name, property_title, agent_id=None):
+    subject = f"Félicitations pour votre acquisition : {property_title} ! 🎉"
+    
+    review_section = ""
+    if agent_id:
+        review_section = f"""
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                <p>Avez-vous apprécié l'accompagnement de votre agent ?</p>
+                <a href="https://woorabuilding.com/rate-agent/{agent_id}" class="btn">Noter mon agent</a>
+            </div>
+        """
+
+    body_html = f"""
+        <p>Bonjour {customer_name},</p>
+        <p>Toute l'équipe de <strong>WOORA BUILDING</strong> vous félicite pour l'acquisition du bien <strong>"{property_title}"</strong> !</p>
+        
+        <p>Nous espérons que ce nouveau chapitre vous apportera entière satisfaction.</p>
+        
+        <p>Merci de nous avoir fait confiance pour votre projet immobilier.</p>
+        
+        {review_section}
+        
+        <p>Cordialement,<br>L'équipe WOORA BUILDING</p>
+    """
+
+    msg = Message(
+        subject,
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[customer_email],
+        html=get_email_template("Félicitations", body_html)
+    )
+
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email deal closed envoyé à {customer_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur envoi email deal closed: {e}")
+        return False
+

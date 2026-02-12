@@ -170,6 +170,12 @@ class Property(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
     agent_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True)  # Agent qui a ajouté le bien
+    author_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True) # Ex-agent_id, for clarity if needed but let's stick to agent_id
+    
+    # --- AJOUT NOUVEAU CHAMP : BUYER_ID ---
+    # Permet de savoir QUI a acheté ou loué le bien (historique des transactions)
+    buyer_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True)
+
     property_type_id = db.Column(db.Integer, db.ForeignKey('PropertyTypes.id', ondelete='RESTRICT'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
@@ -207,6 +213,7 @@ class Property(db.Model):
     
     owner = db.relationship('User', back_populates='properties', foreign_keys=[owner_id])
     agent = db.relationship('User', back_populates='created_properties', foreign_keys=[agent_id])
+    buyer = db.relationship('User', foreign_keys=[buyer_id]) # Relation vers l'acheteur
     property_type = db.relationship('PropertyType', back_populates='properties')
 
     # Relations avec suppression en cascade
@@ -223,7 +230,9 @@ class Property(db.Model):
         }
         
         base_data = {
-            'id': self.id, 'owner_id': self.owner_id, 'agent_id': self.agent_id, 'property_type_id': self.property_type_id,
+            'id': self.id, 'owner_id': self.owner_id, 'agent_id': self.agent_id, 
+            'buyer_id': self.buyer_id, # Inclure l'ID de l'acheteur
+            'property_type_id': self.property_type_id,
             'title': self.title, 'description': self.description, 
             'status': status_data, # Renvoie maintenant un OBJET complet {id, name, color}
             'price': float(self.price) if self.price is not None else None,
@@ -245,6 +254,14 @@ class Property(db.Model):
                 'agent_id': self.agent.id,
                 'agent_name': f"{self.agent.first_name} {self.agent.last_name}",
                 'agent_email': self.agent.email
+            }
+        
+        # Ajouter les informations de l'acheteur s'il existe (Admin only idéalement, mais ici inclus)
+        if self.buyer:
+             base_data['buyer_details'] = {
+                'buyer_id': self.buyer.id,
+                'buyer_name': f"{self.buyer.first_name} {self.buyer.last_name}",
+                'buyer_email': self.buyer.email
             }
         
         return base_data

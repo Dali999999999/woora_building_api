@@ -9,11 +9,12 @@ from app.models import ServiceFee
 
 # Assurez-vous que le chemin vers vos utilitaires d'email est correct
 try:
-    from app.utils.email_utils import send_new_visit_request_notification, send_referral_used_notification
+    from app.utils.email_utils import send_new_visit_request_notification, send_referral_used_notification, send_visit_request_confirmation_to_customer
 except ImportError:
     # Crée des fonctions factices si le fichier n'existe pas encore pour éviter une erreur d'import
     def send_new_visit_request_notification(*args, **kwargs): pass
     def send_referral_used_notification(*args, **kwargs): pass
+    def send_visit_request_confirmation_to_customer(*args, **kwargs): pass
 
 
 seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
@@ -135,13 +136,13 @@ def get_all_properties_for_seeker():
 def get_property_details_for_seeker(property_id):
     """
     Récupère les détails d'un bien immobilier pour un SEEKER.
-    PRIVACY: Exclut les informations sensibles (agent, owner) pour respecter
-    la politique de confidentialité - seul WOORA Building est l'intermédiaire.
+    PRIVACY: Exclut les informations sensibles (agent, owner).
     """
+    user_id = get_jwt_identity()
+    
     property_obj = Property.query.options(
         selectinload(Property.images),
         selectinload(Property.property_type)
-        # NOTE: On ne charge PAS .owner ni .agent pour préserver la confidentialité
     ).get(property_id)
     
     if not property_obj:
@@ -151,154 +152,22 @@ def get_property_details_for_seeker(property_id):
     property_dict = property_obj.to_dict()
     
     # SÉCURITÉ CRITIQUE: Supprimer toutes les informations sensibles
-    # Les clients ne doivent JAMAIS voir les coordonnées de l'agent ou du propriétaire
     property_dict.pop('created_by_agent', None)
     property_dict.pop('owner_details', None)
     property_dict.pop('owner_id', None)
     property_dict.pop('created_by', None)
     
+    # --- CHECK FIRST VISIT REQUEST ---
+    # Vérifie si l'utilisateur a DÉJÀ fait une demande pour ce bien (status 'pending', 'confirmed', 'accepted', 'rejected', etc.)
+    previous_requests_count = VisitRequest.query.filter_by(
+        customer_id=user_id,
+        property_id=property_id
+    ).count()
+    
+    # Si count == 0, c'est sa toute première demande -> Eligible au parrainage
+    property_dict['is_first_visit_request'] = (previous_requests_count == 0)
+    
     return jsonify(property_dict), 200
-
-@seekers_bp.route('/properties/<int:property_id>/visit-requests', methods=['POST'])
-@jwt_required()
-def create_visit_request(property_id):
-    """
-    Permet à un client de soumettre une demande de visite.
-    **SÉCURISÉ** : Utilise with_for_update() pour verrouiller le compte utilisateur
-    et éviter le double-spending des pass de visite.
-    """
-    current_user_id = get_jwt_identity()
-    
-    # VERROUILLAGE PESSIMISTE : On bloque la ligne utilisateur jusqu'au commit/rollback
-    customer = User.query.with_for_update().get(current_user_id)
-
-    if not customer:
-        return jsonify({'message': "Utilisateur non trouvé."}), 404
-        
-    if customer.role != 'customer':
-        return jsonify({'message': "Accès refusé. Seuls les clients peuvent faire des demandes de visite."}), 403
-
-    property_obj = Property.query.get(property_id)
-    if not property_obj:
-        return jsonify({'message': "Bien immobilier non trouvé."}), 404
-
-    data = request.get_json()
-    if not data:
-        return jsonify({'message': "Données manquantes."}), 400
-
-    requested_datetime_str = data.get('requested_datetime')
-    referral_code = data.get('referral_code')
-    message = data.get('message')
-
-    if not requested_datetime_str:
-        return jsonify({'message': "La date et l'heure de la visite sont requises."}), 400
-
-    try:
-        requested_datetime = datetime.fromisoformat(requested_datetime_str)
-    except ValueError:
-        return jsonify({'message': "Format de date invalide. Utilisez le format ISO 8601."}), 400
-
-    if customer.visit_passes <= 0:
-        return jsonify({'message': "Vous n'avez plus de pass de visite disponibles. Veuillez en acheter pour continuer."}), 402
-
-    referral_id = None
-    agent_to_notify = None
-    if referral_code:
-        referral = Referral.query.filter_by(
-            referral_code=referral_code,
-            property_id=property_id
-        ).first()
-        
-        if not referral:
-            return jsonify({'message': "Code de parrainage invalide ou non applicable pour ce bien."}), 400
-        
-        # --- DÉBUT DE LA VÉRIFICATION DE RÉUTILISATION ---
-        existing_referred_visit = VisitRequest.query.filter(
-            VisitRequest.customer_id == current_user_id,
-            VisitRequest.property_id == property_id,
-            VisitRequest.referral_id.isnot(None)
-        ).first()
-
-        if existing_referred_visit:
-            return jsonify({'message': "Vous avez déjà utilisé un code de parrainage pour une visite de ce bien."}), 400
-        # --- FIN DE LA VÉRIFICATION DE RÉUTILISATION ---
-        
-        referral_id = referral.id
-        agent_to_notify = referral.agent
-
-    customer.visit_passes -= 1
-
-    new_visit_request = VisitRequest(
-        customer_id=current_user_id,
-        property_id=property_id,
-        requested_datetime=requested_datetime,
-        message=message,
-        referral_id=referral_id
-    )
-
-    try:
-        db.session.add(customer)
-        db.session.add(new_visit_request)
-        db.session.commit()
-
-        # Notifications
-        admin_users = User.query.filter_by(role='admin').all()
-        if admin_users:
-            admin_email = admin_users[0].email 
-            send_new_visit_request_notification(
-                admin_email,
-                f'{customer.first_name} {customer.last_name}',
-                property_obj.title,
-                requested_datetime.strftime('%d/%m/%Y à %Hh%M'),
-                message
-            )
-
-        if agent_to_notify:
-            send_referral_used_notification(
-                agent_email=agent_to_notify.email,
-                customer_name=f'{customer.first_name} {customer.last_name}',
-                property_title=property_obj.title
-            )
-
-        return jsonify({'message': "Votre demande de visite a été envoyée avec succès et un pass a été utilisé."}), 201
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur lors de la création de la demande de visite: {e}", exc_info=True)
-        return jsonify({'message': "Erreur interne du serveur."}), 500
-
-@seekers_bp.route('/visit_requests', methods=['GET'])
-@jwt_required()
-def get_customer_visit_requests():
-    """
-    Récupère l'historique des demandes de visite pour le client connecté.
-    """
-    current_user_id = get_jwt_identity()
-    customer = User.query.get(current_user_id)
-
-    if not customer or customer.role != 'customer':
-        return jsonify({'message': 'Accès refusé. Seuls les clients peuvent voir leurs demandes de visite.'}), 403
-
-    status_filter = request.args.get('status')
-    query = VisitRequest.query.filter_by(customer_id=current_user_id)
-
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-    
-    visit_requests = query.order_by(VisitRequest.created_at.desc()).all()
-    result = []
-    for req in visit_requests:
-        property_obj = req.property
-        req_dict = {
-            'id': req.id,
-            'property_id': req.property_id,
-            'property_title': property_obj.title if property_obj else 'Bien supprimé ou introuvable',
-            'requested_datetime': req.requested_datetime.isoformat(),
-            'status': req.status,
-            'message': req.message,
-            'created_at': req.created_at.isoformat()
-        }
-        result.append(req_dict)
-    return jsonify(result), 200
 
 # --- NOUVEL ENDPOINT POUR OBTENIR LE PRIX D'UN PASS ---
 @seekers_bp.route('/visit-pass-price', methods=['GET'])
@@ -605,17 +474,46 @@ def submit_visit_request(property_id):
         if requested_dt <= datetime.utcnow():
             return jsonify({'error': 'La date doit être dans le futur.'}), 400
         
-        # Vérifier le code de parrainage si fourni
+        # Vérifier s'il y a déjà une demande en cours (PENDING, CONFIRMED, ou ACCEPTED)
+        active_request = VisitRequest.query.filter(
+            VisitRequest.customer_id == user_id,
+            VisitRequest.property_id == property_id,
+            VisitRequest.status.in_(['pending', 'confirmed', 'accepted'])
+        ).first()
+
+        if active_request:
+            return jsonify({'error': 'Vous avez déjà une demande en cours pour ce bien.'}), 400
+
+        # Vérifier si c'est la TOUTE PREMIÈRE demande de visite pour ce bien
+        # On cherche s'il existe N'IMPORTE QUELLE demande précédente (même rejetée, annulée, ou completed)
+        previous_requests_count = VisitRequest.query.filter_by(
+            customer_id=user_id,
+            property_id=property_id
+        ).count()
+
+        is_first_request = (previous_requests_count == 0)
+
+        # Gestion du code de parrainage - UNIQUEMENT SI C'EST LA PREMIÈRE DEMANDE
         referral_id = None
-        if data.get('referral_code'):
-            referral = Referral.query.filter_by(code=data['referral_code']).first()
-            if referral and referral.property_id == property_id:
-                referral_id = referral.id
-                # Notification à l'agent parrain
-                try:
-                    send_referral_used_notification(referral)
-                except Exception as e:
-                    current_app.logger.warning(f"Échec envoi email parrainage: {e}")
+        if is_first_request:
+            if data.get('referral_code'):
+                referral = Referral.query.filter_by(code=data['referral_code']).first()
+                # On vérifie aussi que le code correspond bien à la propriété demandée
+                if referral and referral.property_id == property_id:
+                    referral_id = referral.id
+                    # Notification à l'agent parrain
+                    try:
+                        send_referral_used_notification(
+                            referral.agent.email,
+                            f"{user.first_name} {user.last_name}",
+                            property_obj.title
+                        )
+                    except Exception as e:
+                        current_app.logger.warning(f"Échec envoi email parrainage: {e}")
+        else:
+            # Si ce n'est pas la première demande, on IGNORE tout code de parrainage envoyé
+            # On pourrait renvoyer une erreur, mais ignorer est plus fluide pour l'UX si le champ est resté rempli
+            pass
         
         # Créer la demande de visite
         visit_request = VisitRequest(
