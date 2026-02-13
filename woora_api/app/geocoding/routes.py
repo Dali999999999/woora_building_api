@@ -14,14 +14,14 @@ def autocomplete_address():
     
     Query params:
         - q: Terme de recherche (requis)
-        - country: Code pays (optionnel, défaut: BJ)
+        - country: Code pays (optionnel, défaut: SN pour Sénégal)
         - limit: Nombre de résultats (optionnel, défaut: 5)
         
     Returns:
         JSON: Liste de suggestions
     """
     query = request.args.get('q', '').strip()
-    country_code = request.args.get('country', 'BJ').upper()
+    country_code = request.args.get('country', 'SN').upper()  # SN = Sénégal
     limit = request.args.get('limit', 5, type=int)
     
     if not query:

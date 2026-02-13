@@ -9,20 +9,19 @@ NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
 USER_AGENT = "WooraBuilding/1.0"
 
 
-def autocomplete_address(query, country_code='BJ', limit=5):
+def autocomplete_address(query, country_code='SN', limit=5):
     """
-    Recherche d'adresse avec autocomplétion.
+    Autocomplète une adresse via l'API Nominatim OpenStreetMap.
     
     Args:
-        query (str): Terme de recherche (ex: "Cotonou")
-        country_code (str): Code pays ISO (BJ pour Bénin)
-        limit (int): Nombre max de résultats
+        query (str): Texte de recherche
+        country_code (str): Code pays ISO (SN pour Sénégal)
+        limit (int): Nombre maximum de résultats
         
     Returns:
         list: Liste de suggestions avec nom, lat, lon, type
     """
     if not query or len(query) < 2:
-        return []
     
     try:
         params = {
