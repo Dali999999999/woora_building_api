@@ -79,6 +79,10 @@ def autocomplete_address(query, country_code='SN', limit=10):
                 continue
                 
             seen_names.add(city_name)
+            
+            # Récupération des champs manquants
+            country = address.get('country')
+            place_type = item.get('type', 'unknown')
 
             results.append({
                 'display_name': city_name, # JUSTE LE NOM
