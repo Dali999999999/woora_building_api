@@ -23,7 +23,7 @@ def autocomplete_address(query, country_code='SN', limit=5):
     """
     if not query or len(query) < 2:
         return []
-    
+
     try:
         params = {
             'q': query,
