@@ -74,8 +74,12 @@ def autocomplete_address(query, country_code='SN', limit=10):
                 continue
                 
             # DÉDUPLICATION: Si on a déjà vu ce nom, on ignore
-            # Ex: Porto-Novo (Node) vs Porto-Novo (Relation) -> On ne garde qu'un seul "Porto-Novo"
             if city_name in seen_names:
+                continue
+            
+            # FILTRAGE STRICT: Le nom de la ville DOIT commencer par la recherche
+            # Sinon on se retrouve avec "Natitingou" quand on tape "Po" (à cause de La Poste)
+            if not city_name.lower().startswith(query.lower()):
                 continue
                 
             seen_names.add(city_name)
