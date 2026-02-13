@@ -25,9 +25,8 @@ def autocomplete_address(query, country_code='SN', limit=5):
         return []
 
     try:
-        params = {
             'q': query,
-            'countrycodes': country_code,
+            'countrycodes': country_code, # Réactivé pour restreindre la recherche au pays spécifié
             'format': 'json',
             'addressdetails': 1,
             'limit': limit,
