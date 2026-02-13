@@ -51,45 +51,41 @@ def autocomplete_address(query, country_code='SN', limit=10):
         
         # Formater les résultats
         results = []
+        seen_names = set()
         for item in data:
             address = item.get('address', {})
             
             # Construire un nom lisible et court
-            # Ex: "Mermoz, Dakar" ou "Porto-Novo, Ouémé"
-            parts = []
+            # Extraction STRICTE de la ville/localité uniquement (demande utilisateur)
+            # Hiérarchie de préférence: City > Town > Village > Suburb
+            city_name = (
+                address.get('city') or 
+                address.get('town') or 
+                address.get('village') or 
+                address.get('hamlet') or 
+                address.get('suburb') or
+                address.get('neighbourhood') or
+                address.get('district') or
+                address.get('municipality')
+            )
             
-            # 1. Le lieu précis (route, quartier, etc.)
-            road = address.get('road') or address.get('pedestrian')
-            suburb = address.get('suburb') or address.get('neighbourhood') or address.get('district')
-            
-            if road: parts.append(road)
-            if suburb: parts.append(suburb)
-            
-            # 2. La ville ou localité importante
-            city = address.get('city') or address.get('town') or address.get('village') or address.get('county')
-            if city and city not in parts:
-                parts.append(city)
+            # Si on n'a rien trouvé qui ressemble à une ville, on saute ou on prend le display_name par défaut
+            if not city_name:
+                continue
                 
-            # 3. La région/état (sauf si c'est déjà la ville, ex: Dakar)
-            state = address.get('state')
-            if state and state != city and state not in parts:
-                parts.append(state)
-            
-            # Note: On NE met PAS le pays car il est déjà sélectionné par l'utilisateur
-            country = address.get('country')
-            place_type = item.get('type', 'unknown')
-            
-            # Fallback si vide
-            clean_display_name = ", ".join(parts)
-            if not clean_display_name:
-                clean_display_name = item.get('display_name', '')
+            # DÉDUPLICATION: Si on a déjà vu ce nom, on ignore
+            # Ex: Porto-Novo (Node) vs Porto-Novo (Relation) -> On ne garde qu'un seul "Porto-Novo"
+            if city_name in seen_names:
+                continue
+                
+            seen_names.add(city_name)
 
             results.append({
-                'display_name': clean_display_name,
-                'raw_display_name': item.get('display_name', ''), # Garder l'original au cas où
-                'city': city,
-                'suburb': suburb,
-                'state': state,
+                'display_name': city_name, # JUSTE LE NOM
+                'raw_display_name': item.get('display_name', ''),
+                'city': city_name,
+                'suburb': address.get('suburb'),
+                'state': address.get('state'),
                 'country': country,
                 'latitude': float(item['lat']),
                 'longitude': float(item['lon']),
