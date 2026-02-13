@@ -15,14 +15,13 @@ def log_request_info():
     current_app.logger.debug(f'🌐 Requête reçue: {request.method} {request.path}')
     current_app.logger.debug(f'🔑 Headers: {dict(request.headers)}')
     current_app.logger.debug(f'📦 Content-Type: {request.content_type}')
-    if request.is_json:
+    if request.is_json and request.content_length and request.content_length > 0:
         try:
-            current_app.logger.debug(f'📄 Body JSON: {request.get_json()}')
-        except Exception as e:
-            current_app.logger.error(f'Erreur de parsing JSON: {e}')
+            current_app.logger.debug(f'📄 Body JSON: {request.get_json(silent=True)}')
+        except Exception:
             current_app.logger.debug(f'📄 Body brut (non JSON): {request.get_data()}')
     else:
-        current_app.logger.debug(f'📄 Body brut: {request.get_data()}')
+        current_app.logger.debug(f'📄 Body: {request.get_data()}')
 
 @app.after_request
 def log_response_info(response):

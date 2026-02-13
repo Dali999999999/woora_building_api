@@ -30,7 +30,8 @@ def autocomplete_address(query, country_code='SN', limit=10):
             'countrycodes': country_code, # Réactivé pour restreindre la recherche au pays spécifié
             'format': 'json',
             'addressdetails': 1,
-            'limit': limit,
+            'addressdetails': 1,
+            'limit': 50, # On demande PLUS de résultats à Nominatim pour pouvoir filtrer agressivement après
             'accept-language': 'fr',  # Résultats en français
         }
         
@@ -79,6 +80,7 @@ def autocomplete_address(query, country_code='SN', limit=10):
             
             # FILTRAGE STRICT: Le nom de la ville DOIT commencer par la recherche
             # Sinon on se retrouve avec "Natitingou" quand on tape "Po" (à cause de La Poste)
+            # On utilise une comparaison insensible à la casse et aux accents (basique)
             if not city_name.lower().startswith(query.lower()):
                 continue
                 
@@ -101,7 +103,7 @@ def autocomplete_address(query, country_code='SN', limit=10):
                 'osm_id': item.get('osm_id'),
             })
         
-        return results
+        return results[:limit]
         
     except requests.RequestException as e:
         current_app.logger.error(f"Nominatim request failed: {e}")
