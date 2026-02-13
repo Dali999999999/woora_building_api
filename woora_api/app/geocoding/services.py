@@ -22,6 +22,7 @@ def autocomplete_address(query, country_code='SN', limit=5):
         list: Liste de suggestions avec nom, lat, lon, type
     """
     if not query or len(query) < 2:
+        return []
     
     try:
         params = {
