@@ -76,6 +76,8 @@ def autocomplete_address(query, country_code='SN', limit=10):
                 parts.append(state)
             
             # Note: On NE met PAS le pays car il est déjà sélectionné par l'utilisateur
+            country = address.get('country')
+            place_type = item.get('type', 'unknown')
             
             # Fallback si vide
             clean_display_name = ", ".join(parts)
