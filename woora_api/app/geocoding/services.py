@@ -9,7 +9,7 @@ NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
 USER_AGENT = "WooraBuilding/1.0"
 
 
-def autocomplete_address(query, country_code='SN', limit=5):
+def autocomplete_address(query, country_code='SN', limit=10):
     """
     Autocomplète une adresse via l'API Nominatim OpenStreetMap.
     
@@ -54,20 +54,37 @@ def autocomplete_address(query, country_code='SN', limit=5):
         for item in data:
             address = item.get('address', {})
             
-            # Construire un nom lisible
-            display_name = item.get('display_name', '')
+            # Construire un nom lisible et court
+            # Ex: "Mermoz, Dakar" ou "Porto-Novo, Ouémé"
+            parts = []
             
-            # Extraire les composants clés
-            city = address.get('city') or address.get('town') or address.get('village')
-            suburb = address.get('suburb') or address.get('neighbourhood')
+            # 1. Le lieu précis (route, quartier, etc.)
+            road = address.get('road') or address.get('pedestrian')
+            suburb = address.get('suburb') or address.get('neighbourhood') or address.get('district')
+            
+            if road: parts.append(road)
+            if suburb: parts.append(suburb)
+            
+            # 2. La ville ou localité importante
+            city = address.get('city') or address.get('town') or address.get('village') or address.get('county')
+            if city and city not in parts:
+                parts.append(city)
+                
+            # 3. La région/état (sauf si c'est déjà la ville, ex: Dakar)
             state = address.get('state')
-            country = address.get('country')
+            if state and state != city and state not in parts:
+                parts.append(state)
             
-            # Type de lieu (city, suburb, road, etc.)
-            place_type = item.get('type', 'unknown')
+            # Note: On NE met PAS le pays car il est déjà sélectionné par l'utilisateur
             
+            # Fallback si vide
+            clean_display_name = ", ".join(parts)
+            if not clean_display_name:
+                clean_display_name = item.get('display_name', '')
+
             results.append({
-                'display_name': display_name,
+                'display_name': clean_display_name,
+                'raw_display_name': item.get('display_name', ''), # Garder l'original au cas où
                 'city': city,
                 'suburb': suburb,
                 'state': state,
