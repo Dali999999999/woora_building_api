@@ -1301,3 +1301,31 @@ def get_agent_property_requests():
     requests = PropertyRequest.query.filter_by(customer_id=current_user_id).order_by(PropertyRequest.created_at.desc()).all()
     
     return jsonify([req.to_dict() for req in requests]), 200
+
+@agents_bp.route('/property-requests/<int:request_id>', methods=['DELETE'])
+@jwt_required()
+def delete_agent_property_request(request_id):
+    """
+    Permet à un AGENT de supprimer (fermer) une de ses alertes.
+    """
+    current_user_id = get_jwt_identity()
+    
+    # On cherche la requête (vérification que c'est bien celle de l'agent connecté)
+    req = PropertyRequest.query.filter_by(id=request_id, customer_id=current_user_id).first()
+    
+    if not req:
+        return jsonify({'message': "Alerte non trouvée ou accès refusé."}), 404
+        
+    try:
+        # Fermeture (Soft Delete / Status Update)
+        req.status = 'closed'
+        req.archived_at = datetime.utcnow()
+        req.archived_by = current_user_id
+        
+        db.session.commit()
+        return jsonify({'message': "Alerte agent supprimée avec succès."}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur suppression alerte agent: {e}")
+        return jsonify({'message': "Erreur serveur."}), 500
