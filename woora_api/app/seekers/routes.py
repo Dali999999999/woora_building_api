@@ -317,8 +317,11 @@ def get_seeker_property_requests():
     if not customer or customer.role != 'customer':
         return jsonify({'message': 'Accès refusé.'}), 403
 
-    # On récupère toutes les demandes du client, les plus récentes en premier
-    requests = PropertyRequest.query.filter_by(customer_id=current_user_id).order_by(PropertyRequest.created_at.desc()).all()
+    # On récupère toutes les demandes du client qui ne sont pas fermées, les plus récentes en premier
+    requests = PropertyRequest.query.filter(
+        PropertyRequest.customer_id == current_user_id,
+        PropertyRequest.status.notin_(['closed', 'cancelled'])
+    ).order_by(PropertyRequest.created_at.desc()).all()
     
     return jsonify([req.to_dict() for req in requests]), 200
 
