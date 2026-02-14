@@ -322,6 +322,37 @@ def get_seeker_property_requests():
     
     return jsonify([req.to_dict() for req in requests]), 200
 
+@seekers_bp.route('/property-requests/<int:request_id>', methods=['DELETE'])
+@jwt_required()
+def delete_property_request(request_id):
+    """
+    Permet à un client ou agent de supprimer (fermer) une alerte.
+    """
+    current_user_id = get_jwt_identity()
+    
+    # On cherche la requête
+    req = PropertyRequest.query.filter_by(id=request_id, customer_id=current_user_id).first()
+    
+    if not req:
+        return jsonify({'message': "Alerte non trouvée ou accès refusé."}), 404
+        
+    try:
+        # Option 1: Suppression définitive (Hard Delete)
+        # db.session.delete(req)
+        
+        # Option 2: Fermeture (Soft Delete / Status Update) - Préférable pour l'historique
+        req.status = 'closed'
+        req.archived_at = datetime.utcnow()
+        req.archived_by = current_user_id
+        
+        db.session.commit()
+        return jsonify({'message': "Alerte supprimée avec succès."}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur suppression alerte: {e}")
+        return jsonify({'message': "Erreur serveur."}), 500
+
 # ===================================================================
 # GESTION DES FAVORIS
 # ===================================================================
