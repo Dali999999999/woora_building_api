@@ -394,7 +394,9 @@ class PropertyRequest(db.Model):
             'property_type_name': self.property_type.name if self.property_type else "Tous types",
             'min_price': float(self.min_price) if self.min_price is not None else None,
             'max_price': float(self.max_price) if self.max_price is not None else None,
-            'status': self.status, 'admin_notes': self.admin_notes,
+            'status': self.status, 
+            'admin_notes': self.admin_notes,
+            'admin_response': self.admin_notes,  # Alias pour l'app mobile
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'archived_at': self.archived_at.isoformat() if self.archived_at else None,
             'archived_by': self.archived_by,

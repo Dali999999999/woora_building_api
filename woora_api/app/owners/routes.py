@@ -272,19 +272,39 @@ def update_owner_property(property_id):
     Gère à la fois les champs statiques (colonnes de la table) et les attributs dynamiques (champ JSON).
     """
     current_user_id = get_jwt_identity()
-    owner = User.query.get(current_user_id)
-    if not owner or owner.role != 'owner':
-        return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent modifier leurs biens."}), 403
+    user = User.query.get(current_user_id)
+    
+    # 1. Vérification des rôles autorisés
+    if not user or user.role not in ['owner', 'agent', 'admin']:
+        return jsonify({'message': "Accès non autorisé."}), 403
 
-    property = Property.query.filter_by(id=property_id, owner_id=current_user_id).first()
+    # 2. Récupération du bien
+    property = Property.query.get(property_id)
     if not property:
-        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas le propriétaire."}), 404
+        return jsonify({'message': "Bien immobilier non trouvé."}), 404
+
+    # 3. Vérification des permissions spécifiques
+    if user.role == 'admin':
+        # L'admin a tous les droits, on continue
+        pass
+    else:
+        # Pour Owner et Agent
+        # A. Vérifier qu'ils sont bien liés au bien
+        is_owner = (property.owner_id == current_user_id)
+        is_agent = (property.agent_id == current_user_id)
+        
+        if not is_owner and not is_agent:
+             return jsonify({'message': "Accès non autorisé. Vous n'êtes pas le propriétaire ou l'agent de ce bien."}), 403
+             
+        # B. Vérifier le statut de validation
+        if property.is_validated:
+             return jsonify({'message': "Veuillez contacter WOORA Building (Bien déjà validé)."}), 403
 
     data = request.get_json()
     if not data:
         return jsonify({'message': "Corps de la requête manquant ou invalide."}), 400
         
-    current_app.logger.debug(f"Données reçues pour la mise à jour du bien {property_id}: {data}")
+    current_app.logger.debug(f"Données reçues pour la mise à jour du bien {property_id} par {user.role}: {data}")
 
     attributes_data = data.get('attributes')
     if attributes_data:
