@@ -528,7 +528,7 @@ def submit_visit_request(property_id):
         referral_id = None
         if is_first_request:
             if data.get('referral_code'):
-                referral = Referral.query.filter_by(code=data['referral_code']).first()
+                referral = Referral.query.filter_by(referral_code=data['referral_code']).first()
                 # On vérifie aussi que le code correspond bien à la propriété demandée
                 if referral and referral.property_id == property_id:
                     referral_id = referral.id
