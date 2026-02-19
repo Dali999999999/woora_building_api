@@ -1269,7 +1269,21 @@ def update_property_by_admin(property_id):
     
     if 'status' in attributes_data:
         # On accepte tous les statuts valides
-        property.status = attributes_data['status']
+        raw_status = attributes_data['status']
+        # Mapping des noms d'affichage vers les codes ENUM de la base de données
+        status_map = {
+            'À Vendre': 'for_sale',
+            'À Louer': 'for_rent',
+            'Vendu': 'sold',
+            'Loué': 'rented'
+        }
+        # Si le statut est dans la map, on utilise le code, sinon on essaie la valeur brute
+        property.status = status_map.get(raw_status, raw_status)
+        
+        # Mise à jour synchronisée du status_id si possible
+        status_obj = PropertyStatus.query.filter_by(name=raw_status).first()
+        if status_obj:
+            property.status_id = status_obj.id
         
     if 'description' in attributes_data:
         property.description = attributes_data.get('description')
