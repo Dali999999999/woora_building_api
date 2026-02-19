@@ -39,10 +39,17 @@ def get_all_properties_for_seeker():
         selectinload(Property.property_type),
         selectinload(Property.owner)
     ).join(Property.owner).filter(
-        Property.status.in_(['for_sale', 'for_rent']),
         Property.is_validated == True,
         User.deleted_at == None
     )
+
+    # --- 1.1 Filtre par Statut (Dynamique) ---
+    status_param = request.args.get('status')
+    if status_param and status_param != 'null' and status_param != '':
+        base_query = base_query.filter(Property.status == status_param)
+    else:
+        # Comportement par défaut : Vente et Location
+        base_query = base_query.filter(Property.status.in_(['for_sale', 'for_rent']))
 
     # --- 2. Filtres "Durs" (Exclusion) ---
     # Ces filtres éliminent les résultats qui ne correspondent PAS.
@@ -525,25 +532,35 @@ def submit_visit_request(property_id):
         is_first_request = (previous_requests_count == 0)
 
         # Gestion du code de parrainage - UNIQUEMENT SI C'EST LA PREMIÈRE DEMANDE
-        referral_id = None
         if is_first_request:
             if data.get('referral_code'):
-                referral = Referral.query.filter_by(referral_code=data['referral_code']).first()
-                # On vérifie aussi que le code correspond bien à la propriété demandée
-                if referral and referral.property_id == property_id:
-                    referral_id = referral.id
-                    # Notification à l'agent parrain
-                    try:
-                        send_referral_used_notification(
-                            referral.agent.email,
-                            f"{user.first_name} {user.last_name}",
-                            property_obj.title
-                        )
-                    except Exception as e:
-                        current_app.logger.warning(f"Échec envoi email parrainage: {e}")
+                referral_code_input = data['referral_code'].strip()
+                referral = Referral.query.filter_by(referral_code=referral_code_input).first()
+                
+                if not referral:
+                     # Code invalide : on retourne une erreur explicite
+                     return jsonify({'error': 'Code de parrainage invalide.', 'message': 'Code de parrainage invalide.'}), 400
+
+                # VÉRIFICATION USAGE UNIQUE (Globale)
+                # On vérifie si ce code a DÉJÀ été utilisé par n'importe qui
+                usage_count = VisitRequest.query.filter_by(referral_id=referral.id).count()
+                if usage_count > 0:
+                     return jsonify({'error': 'Ce code de parrainage a déjà été utilisé.', 'message': 'Ce code de parrainage a déjà été utilisé.'}), 400
+
+                # Si valide et non utilisé, on l'associe
+                referral_id = referral.id
+                
+                # Notification à l'agent parrain
+                try:
+                    send_referral_used_notification(
+                        referral.agent.email,
+                        f"{user.first_name} {user.last_name}",
+                        property_obj.title
+                    )
+                except Exception as e:
+                    current_app.logger.warning(f"Échec envoi email parrainage: {e}")
         else:
-            # Si ce n'est pas la première demande, on IGNORE tout code de parrainage envoyé
-            # On pourrait renvoyer une erreur, mais ignorer est plus fluide pour l'UX si le champ est resté rempli
+            # Si ce n'est pas la première demande, on ignore le code pour éviter les erreurs bloquantes
             pass
         
         # Créer la demande de visite

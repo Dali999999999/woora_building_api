@@ -339,6 +339,24 @@ class VisitRequest(db.Model):
     property = db.relationship('Property', back_populates='visit_requests_received')
     referral = db.relationship('Referral', back_populates='visit_requests')
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'property_id': self.property_id,
+            'referral_id': self.referral_id,
+            'requested_datetime': self.requested_datetime.isoformat() if self.requested_datetime else None,
+            'status': self.status,
+            'message': self.message,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'customer': self.customer.to_dict() if self.customer else None,
+            'property': self.property.to_dict() if self.property else None,
+            'referral': {
+                'id': self.referral.id,
+                'code': self.referral.referral_code
+            } if self.referral else None
+        }
+
 class PropertyRequestMatch(db.Model):
     __tablename__ = 'PropertyRequestMatches'
     id = db.Column(db.Integer, primary_key=True)

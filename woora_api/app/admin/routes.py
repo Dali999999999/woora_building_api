@@ -671,6 +671,10 @@ def get_visit_requests():
     query = VisitRequest.query
     if status_filter:
         query = query.filter_by(status=status_filter)
+    
+    # Tri par date de visite (ascendant = plus proche en premier)
+    query = query.order_by(VisitRequest.requested_datetime.asc())
+    
     result = []
     for req in query.all():
         customer = User.query.get(req.customer_id)
