@@ -19,7 +19,7 @@ except ImportError:
 
 seekers_bp = Blueprint('seekers', __name__, url_prefix='/seekers')
 
-from sqlalchemy import or_, desc, case, func, cast, String
+from sqlalchemy import or_, desc, case, func, cast, String, Numeric
 from sqlalchemy.orm import selectinload # Optimization N+1
 import json
 
@@ -77,11 +77,11 @@ def get_all_properties_for_seeker():
     try:
         min_price = request.args.get('min_price')
         if min_price:
-            base_query = base_query.filter(Property.price >= float(min_price))
+            base_query = base_query.filter(cast(Property.price, Numeric) >= float(min_price))
         
         max_price = request.args.get('max_price')
         if max_price:
-            base_query = base_query.filter(Property.price <= float(max_price))
+            base_query = base_query.filter(cast(Property.price, Numeric) <= float(max_price))
     except (ValueError, TypeError):
         pass
 

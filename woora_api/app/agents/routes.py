@@ -5,7 +5,7 @@ from app.utils.helpers import generate_unique_referral_code
 from app import db
 import requests
 import os
-from sqlalchemy import func, or_, desc, case, cast, String
+from sqlalchemy import func, or_, desc, case, cast, String, Numeric
 from app.models import PayoutRequest, Transaction
 from datetime import datetime
 import json
@@ -75,11 +75,11 @@ def get_all_properties_for_agent():
     try:
         min_price = request.args.get('min_price')
         if min_price:
-            base_query = base_query.filter(Property.price >= float(min_price))
+            base_query = base_query.filter(cast(Property.price, Numeric) >= float(min_price))
         
         max_price = request.args.get('max_price')
         if max_price:
-            base_query = base_query.filter(Property.price <= float(max_price))
+            base_query = base_query.filter(cast(Property.price, Numeric) <= float(max_price))
     except (ValueError, TypeError):
         pass
 
