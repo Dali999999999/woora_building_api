@@ -40,6 +40,7 @@ def get_all_properties_for_seeker():
         selectinload(Property.owner)
     ).join(Property.owner).filter(
         Property.is_validated == True,
+        Property.deleted_at == None,
         User.deleted_at == None
     )
 

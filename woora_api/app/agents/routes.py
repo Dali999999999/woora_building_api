@@ -5,7 +5,7 @@ from app.utils.helpers import generate_unique_referral_code
 from app import db
 import requests
 import os
-from sqlalchemy import func
+from sqlalchemy import func, or_, desc, case, cast, String
 from app.models import PayoutRequest, Transaction
 from datetime import datetime
 import json
@@ -36,16 +36,80 @@ def get_all_properties_for_agent():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
-    # On filtre les biens pour ne garder que ceux avec le statut 'for_sale' ou 'for_rent'.
-    # OPTIMISATION : Pré-chargement des images
-    query = Property.query.options(selectinload(Property.images)).filter(
-        Property.status.in_(['for_sale', 'for_rent']),
-        Property.deleted_at == None
+    # Base query for general marketplace: Validated + Not Deleted
+    base_query = Property.query.options(
+        selectinload(Property.images),
+        selectinload(Property.property_type),
+        selectinload(Property.owner)
+    ).join(Property.owner).filter(
+        Property.is_validated == True,
+        Property.deleted_at == None,
+        User.deleted_at == None
     )
-    
+
+    # --- 1. Filtre par Statut (Dynamique) ---
+    status_param = request.args.get('status')
+    if status_param and status_param != 'null' and status_param != '':
+        base_query = base_query.filter(Property.status == status_param)
+    else:
+        # Comportement par défaut : Vente et Location
+        base_query = base_query.filter(Property.status.in_(['for_sale', 'for_rent']))
+
+    # --- 2. Filtres "Durs" (Exclusion) ---
+    search_query = request.args.get('search', '').strip()
+    if search_query:
+        search_pattern = f"%{search_query}%"
+        base_query = base_query.filter(or_(
+            Property.title.ilike(search_pattern),
+            Property.city.ilike(search_pattern),
+            Property.address.ilike(search_pattern)
+        ))
+
+    try:
+        property_type_id = request.args.get('property_type_id')
+        if property_type_id:
+            base_query = base_query.filter(Property.property_type_id == int(property_type_id))
+    except (ValueError, TypeError):
+        pass
+
+    try:
+        min_price = request.args.get('min_price')
+        if min_price:
+            base_query = base_query.filter(Property.price >= float(min_price))
+        
+        max_price = request.args.get('max_price')
+        if max_price:
+            base_query = base_query.filter(Property.price <= float(max_price))
+    except (ValueError, TypeError):
+        pass
+
+    # --- 3. Filtres "Flous" (Score de Pertinence) ---
+    relevance_score = 0
+    filter_active = False
+
+    filters_json = request.args.get('filters')
+    if filters_json:
+        try:
+            dynamic_filters = json.loads(filters_json)
+            if isinstance(dynamic_filters, dict) and dynamic_filters:
+                filter_active = True
+                for key, value in dynamic_filters.items():
+                    attr_value = func.json_unquote(func.json_extract(Property.attributes, f'$.{key}'))
+                    relevance_score += case(
+                        (attr_value == str(value), 1),
+                        else_=0
+                    )
+        except json.JSONDecodeError:
+            pass
+
+    # --- 4. Tri et Pagination ---
+    if filter_active:
+        query = base_query.order_by(desc(relevance_score), Property.created_at.desc())
+    else:
+        query = base_query.order_by(Property.created_at.desc())
+
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     properties = pagination.items
-    # --- FIN DE LA CORRECTION ---
     
     return jsonify({
         'properties': [p.to_dict() for p in properties],
