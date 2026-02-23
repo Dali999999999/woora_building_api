@@ -918,17 +918,19 @@ def create_property_for_agent():
         current_app.logger.warning(f"Validation échouée: description doit être une chaîne de caractères. Reçu: {description}")
         return jsonify({'message': "description doit être une chaîne de caractères."}), 400
 
-    address = dynamic_attributes.get('address')
-    current_app.logger.debug(f"address brut: {address}, type: {type(address)}")
-    if address is not None and not isinstance(address, str):
-        current_app.logger.warning(f"Validation échouée: address doit être une chaîne de caractères. Reçu: {address}")
-        return jsonify({'message': "address doit être une chaîne de caractères."}), 400
-
-    city = dynamic_attributes.get('city')
-    current_app.logger.debug(f"city brut: {city}, type: {type(city)}")
+    # Extraction intelligente pour la ville (support du français)
+    city = dynamic_attributes.get('city') or dynamic_attributes.get('Ville') or dynamic_attributes.get('ville')
+    current_app.logger.debug(f"city extrait: {city}, type: {type(city)}")
     if city is not None and not isinstance(city, str):
         current_app.logger.warning(f"Validation échouée: city doit être une chaîne de caractères. Reçu: {city}")
         return jsonify({'message': "city doit être une chaîne de caractères."}), 400
+
+    # Extraction intelligente pour l'adresse/quartier (support du français)
+    address = dynamic_attributes.get('address') or dynamic_attributes.get('Adresse') or dynamic_attributes.get('adresse') or dynamic_attributes.get('Quartier') or dynamic_attributes.get('quartier')
+    current_app.logger.debug(f"address extrait: {address}, type: {type(address)}")
+    if address is not None and not isinstance(address, str):
+        current_app.logger.warning(f"Validation échouée: address doit être une chaîne de caractères. Reçu: {address}")
+        return jsonify({'message': "address doit être une chaîne de caractères."}), 400
 
     postal_code = dynamic_attributes.get('postal_code')
     current_app.logger.debug(f"postal_code brut: {postal_code}, type: {type(postal_code)}")
@@ -1325,6 +1327,30 @@ def create_agent_property_request():
     city = request_values.get('city')
     min_price = request_values.get('min_price')
     max_price = request_values.get('max_price')
+
+    # --- NOUVEAU : Validation 50% Remplissage ---
+    # base_fields : city, min_price (ou max_price)
+    # plus les attributs additionnels dans request_values
+    
+    total_fields = 2 # Ville, Prix (on compte la fourchette comme 1 champ sémantique)
+    filled_fields = 0
+    
+    if city: filled_fields += 1
+    if min_price or max_price: filled_fields += 1
+    
+    # On évalue les autres attributs dynamiques (ex: chambres, salles de bain)
+    for key, val in request_values.items():
+        if key not in ['city', 'min_price', 'max_price']:
+            total_fields += 1
+            # Si val est renseigné (non null, non string vide)
+            if val is not None and str(val).strip() != '':
+                 filled_fields += 1
+                 
+    completion_ratio = filled_fields / max(1, total_fields)
+    
+    if completion_ratio < 0.5:
+        return jsonify({'message': "Veuillez renseigner au moins 50% des critères pour valider cette alerte."}), 400
+    # --- FIN VALIDATION ---
 
     # 4. On crée l'objet PropertyRequest
     # On réutilise la colonne customer_id pour l'ID de l'agent (car User table unifiée)

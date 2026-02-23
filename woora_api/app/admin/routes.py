@@ -697,6 +697,7 @@ def confirm_visit_request(request_id):
     if vr.status != 'pending':
         return jsonify({'message': 'Pas en attente.'}), 400
     vr.status = 'confirmed'
+    vr.customer_has_unread_update = True
     try:
         db.session.commit()
         owner = User.query.get(Property.query.get(vr.property_id).owner_id)
@@ -723,6 +724,7 @@ def reject_visit_request_by_admin(request_id):
         return jsonify({'message': 'Impossible d\'annuler une visite déjà effectuée ou rejetée.'}), 400
         
     vr.status = 'rejected'
+    vr.customer_has_unread_update = True
     msg = request.get_json().get('message', 'Annulation par l\'administrateur.')
     
     try:

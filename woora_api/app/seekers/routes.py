@@ -287,6 +287,25 @@ def create_property_request():
     min_price = request_values.get('min_price')
     max_price = request_values.get('max_price')
 
+    # --- NOUVEAU : Validation 50% Remplissage ---
+    total_fields = 2 # Ville, Prix (on compte la fourchette comme 1 champ logique)
+    filled_fields = 0
+    
+    if city: filled_fields += 1
+    if min_price or max_price: filled_fields += 1
+    
+    for key, val in request_values.items():
+        if key not in ['city', 'min_price', 'max_price']:
+            total_fields += 1
+            if val is not None and str(val).strip() != '':
+                 filled_fields += 1
+                 
+    completion_ratio = filled_fields / max(1, total_fields)
+    
+    if completion_ratio < 0.5:
+        return jsonify({'message': "Veuillez renseigner au moins 50% des critères pour valider cette alerte."}), 400
+    # --- FIN VALIDATION ---
+
     # 4. On crée l'objet PropertyRequest en assignant chaque valeur à la bonne colonne
     new_request = PropertyRequest(
         customer_id=current_user_id,
@@ -532,6 +551,11 @@ def submit_visit_request(property_id):
 
         is_first_request = (previous_requests_count == 0)
 
+        # Vérification du solde de pass de visite
+        if user.visit_passes <= 0:
+            return jsonify({'error': "Vous n'avez pas assez de pass de visite. Veuillez en acheter."}), 400
+
+        referral_id = None
         # Gestion du code de parrainage - UNIQUEMENT SI C'EST LA PREMIÈRE DEMANDE
         if is_first_request:
             if data.get('referral_code'):
@@ -574,6 +598,9 @@ def submit_visit_request(property_id):
             status='pending'
         )
         
+        # Déduction du pass de visite
+        user.visit_passes -= 1
+
         db.session.add(visit_request)
         db.session.commit()
         

@@ -315,7 +315,7 @@ def upload_profile_picture():
         current_app.logger.error(f"Erreur d'upload de la photo de profil: {e}")
         return jsonify({'error': 'Erreur interne du serveur.'}), 500
 
-from app.models import VisitRequest, PropertyRequestMatch, PropertyRequest, Property, Referral
+from app.models import VisitRequest, PropertyRequestMatch, PropertyRequest, Property, Referral, Commission
 
 @auth_bp.route('/notifications/summary', methods=['GET'])
 @jwt_required()
@@ -334,7 +334,9 @@ def get_notifications_summary():
         
     response_data = {
         'pending_visits_count': 0,
-        'unread_alerts_count': 0
+        'unread_alerts_count': 0,
+        'seeker_unread_visits_count': 0,
+        'agent_unread_commissions_count': 0
     }
     
     try:
@@ -385,9 +387,65 @@ def get_notifications_summary():
                     PropertyRequestMatch.is_read == False
                 ).count()
                 response_data['unread_alerts_count'] = unread_count
+                
+        # 3. NOUVEAU BADGE VISITES CLIENT (Pour Seekers)
+        if user.role == 'customer':
+            seeker_visits_unread = VisitRequest.query.filter_by(
+                customer_id=user.id,
+                customer_has_unread_update=True
+            ).count()
+            response_data['seeker_unread_visits_count'] = seeker_visits_unread
+            
+        # 4. NOUVEAU BADGE GAINS (Pour Agents)
+        if user.role == 'agent':
+            agent_commissions_unread = Commission.query.filter_by(
+                agent_id=user.id,
+                is_read=False
+            ).count()
+            response_data['agent_unread_commissions_count'] = agent_commissions_unread
         
         return jsonify(response_data), 200
         
     except Exception as e:
         current_app.logger.error(f"Erreur lors du calcul des notifications: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne lors du calcul des notifications.'}), 500
+
+@auth_bp.route('/notifications/read_visits', methods=['POST'])
+@jwt_required()
+def mark_visits_as_read():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    if not user or user.role != 'customer':
+        return jsonify({'message': 'Non autorisé.'}), 403
+        
+    try:
+        VisitRequest.query.filter_by(
+            customer_id=user.id, 
+            customer_has_unread_update=True
+        ).update({'customer_has_unread_update': False})
+        db.session.commit()
+        return jsonify({'message': 'Visites marquées comme lues.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur mark_visits_as_read: {e}")
+        return jsonify({'message': 'Erreur interne'}), 500
+
+@auth_bp.route('/notifications/read_commissions', methods=['POST'])
+@jwt_required()
+def mark_commissions_as_read():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    if not user or user.role != 'agent':
+        return jsonify({'message': 'Non autorisé.'}), 403
+        
+    try:
+        Commission.query.filter_by(
+            agent_id=user.id, 
+            is_read=False
+        ).update({'is_read': True})
+        db.session.commit()
+        return jsonify({'message': 'Commissions marquées comme lues.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur mark_commissions_as_read: {e}")
+        return jsonify({'message': 'Erreur interne'}), 500

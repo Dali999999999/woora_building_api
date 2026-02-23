@@ -77,17 +77,20 @@ def create_property():
         current_app.logger.warning(f"Validation échouée: description doit être une chaîne de caractères. Reçu: {description}")
         return jsonify({'message': "description doit être une chaîne de caractères."}), 400
 
-    address = dynamic_attributes.get('address')
-    current_app.logger.debug(f"address brut: {address}, type: {type(address)}")
-    if address is not None and not isinstance(address, str):
-        current_app.logger.warning(f"Validation échouée: address doit être une chaîne de caractères. Reçu: {address}")
-        return jsonify({'message': "address doit être une chaîne de caractères."}), 400
-
-    city = dynamic_attributes.get('city')
-    current_app.logger.debug(f"city brut: {city}, type: {type(city)}")
+    # Extraction intelligente pour la ville (support du français)
+    city = dynamic_attributes.get('city') or dynamic_attributes.get('Ville') or dynamic_attributes.get('ville')
+    current_app.logger.debug(f"city extrait: {city}, type: {type(city)}")
     if city is not None and not isinstance(city, str):
         current_app.logger.warning(f"Validation échouée: city doit être une chaîne de caractères. Reçu: {city}")
         return jsonify({'message': "city doit être une chaîne de caractères."}), 400
+
+    # Extraction intelligente pour l'adresse/quartier (support du français)
+    # Souvent 'Quartier' est utilisé sur l'app mobile en guise d'adresse.
+    address = dynamic_attributes.get('address') or dynamic_attributes.get('Adresse') or dynamic_attributes.get('adresse') or dynamic_attributes.get('Quartier') or dynamic_attributes.get('quartier')
+    current_app.logger.debug(f"address extrait: {address}, type: {type(address)}")
+    if address is not None and not isinstance(address, str):
+        current_app.logger.warning(f"Validation échouée: address doit être une chaîne de caractères. Reçu: {address}")
+        return jsonify({'message': "address doit être une chaîne de caractères."}), 400
 
     postal_code = dynamic_attributes.get('postal_code')
     current_app.logger.debug(f"postal_code brut: {postal_code}, type: {type(postal_code)}")
@@ -491,6 +494,7 @@ def accept_visit_request_by_owner(request_id):
         return jsonify({'message': f"Cette demande ne peut pas être acceptée car son statut est '{visit_request.status}'."}), 400
 
     visit_request.status = 'accepted'
+    visit_request.customer_has_unread_update = True
 
     try:
         db.session.commit()
@@ -533,6 +537,7 @@ def reject_visit_request_by_owner(request_id):
         return jsonify({'message': f"Cette demande ne peut pas être rejetée car son statut est '{visit_request.status}'."}), 400
 
     visit_request.status = 'rejected'
+    visit_request.customer_has_unread_update = True
     
     # On récupère le message de rejet optionnel
     data = request.get_json() or {}

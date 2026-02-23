@@ -27,23 +27,74 @@ def find_matches_for_property(property_id):
         matches_created = 0
 
         for req in matching_requests:
-            # City check (if specified in request)
-            city_valid = True
-            if req.city and prop.city:
-                # Case-insensitive substring match
-                if req.city.lower() not in prop.city.lower():
-                    city_valid = False
+            import json
             
-            # Price check
-            # Logic: If property has a price, it must fall within user's range (if specified)
-            price_valid = True
-            if prop.price:
-                if req.min_price and prop.price < req.min_price:
-                    price_valid = False
-                if req.max_price and prop.price > req.max_price:
-                    price_valid = False
+            # --- NOUVEAU : Logique de Matching à 80% ---
+            total_criteria = 0
+            matched_criteria = 0
+            is_mandatory_failed = False
             
-            if city_valid and price_valid:
+            # 1. Vérification Ville (Obligatoire si spécifiée)
+            if req.city:
+                total_criteria += 1
+                if prop.city and req.city.lower() in prop.city.lower():
+                    matched_criteria += 1
+                else:
+                    is_mandatory_failed = True
+            
+            # 2. Vérification Prix (Obligatoire si spécifié)
+            if req.min_price or req.max_price:
+                total_criteria += 1
+                price_match = True
+                if prop.price:
+                    if req.min_price and prop.price < req.min_price:
+                        price_match = False
+                    if req.max_price and prop.price > req.max_price:
+                        price_match = False
+                else:
+                    price_match = False # Si la requête a un prix mais le bien n'en a pas
+                
+                if price_match:
+                    matched_criteria += 1
+                else:
+                    is_mandatory_failed = True
+
+            # Si un critère obligatoire (Ville ou Prix) a échoué, on passe au bien suivant directement
+            if is_mandatory_failed:
+                continue
+                
+            # 3. Vérification des Attributs Dynamiques
+            try:
+                request_details = json.loads(req.request_details) if req.request_details else {}
+            except json.JSONDecodeError:
+                request_details = {}
+                
+            prop_attributes = prop.attributes if prop.attributes else {}
+            
+            for key, req_val in request_details.items():
+                if key not in ['city', 'min_price', 'max_price'] and req_val is not None and str(req_val).strip() != '':
+                    total_criteria += 1
+                    
+                    # On cherche la correspondance dans les attributs du bien
+                    prop_val = prop_attributes.get(key)
+                    
+                    # Logique de comparaison flexible (ex: texte, nombre)
+                    if prop_val is not None:
+                        if str(req_val).lower() == str(prop_val).lower(): # Match exact texte
+                            matched_criteria += 1
+                        elif isinstance(req_val, (int, float)) and isinstance(prop_val, (int, float)):
+                            if req_val == prop_val: # Match exact nombre
+                                matched_criteria += 1
+            
+            # Calcul du score final
+            # Si total_criteria est 0, c'est que l'alerte n'avait aucun critère (impossible avec la règle des 50% normalement)
+            # Dans ce cas, on match par défaut puisque le type de bien correspond déjà (filtre initial)
+            match_score = (matched_criteria / total_criteria) if total_criteria > 0 else 1.0
+            
+            current_app.logger.debug(f"Matching Property {prop.id} with Request {req.id} - Score: {match_score*100}% ({matched_criteria}/{total_criteria})")
+
+            # Seuil de 80% (0.8)
+            if match_score >= 0.8:
                 # Check for existing match to avoid duplicates
                 existing_match = PropertyRequestMatch.query.filter_by(
                     property_request_id=req.id,
