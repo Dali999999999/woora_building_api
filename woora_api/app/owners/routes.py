@@ -194,7 +194,8 @@ def create_property():
         postal_code=postal_code,
         latitude=latitude,
         longitude=longitude
-        # JSON attributes mapping removed in favor of 100% EAV architecture
+    )
+    # JSON attributes mapping removed in favor of 100% EAV architecture
     try:
         current_app.logger.debug(f"Nouvelle propriété créée (avant commit): {new_property}")
 
