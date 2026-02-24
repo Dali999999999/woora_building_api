@@ -613,11 +613,10 @@ def get_property_types_for_owner():
         pt_dict = pt.to_dict()
         pt_dict['attributes'] = []
         
-        # On parcourt les scopes qui ont été pré-chargés
-        for scope in pt.attribute_scopes:
+        # On parcourt les scopes triés par sort_order (ordre défini par l'admin)
+        sorted_scopes = sorted(pt.attribute_scopes, key=lambda s: s.sort_order)
+        for scope in sorted_scopes:
             attribute = scope.attribute
-            # Le .to_dict() de l'attribut utilisera les options déjà pré-chargées,
-            # sans faire de nouvelle requête.
             attr_dict = attribute.to_dict()
             pt_dict['attributes'].append(attr_dict)
             

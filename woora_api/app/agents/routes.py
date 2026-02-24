@@ -289,7 +289,9 @@ def get_property_types_for_agent():
             pt_dict = pt.to_dict()
             pt_dict['attributes'] = []
             
-            for scope in pt.attribute_scopes:
+            # Sort by admin-configured sort_order
+            sorted_scopes = sorted(pt.attribute_scopes, key=lambda s: s.sort_order)
+            for scope in sorted_scopes:
                 attribute = scope.attribute
                 attr_dict = attribute.to_dict()
                 pt_dict['attributes'].append(attr_dict)

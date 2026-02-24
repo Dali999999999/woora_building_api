@@ -158,6 +158,7 @@ class PropertyAttributeScope(db.Model):
     __tablename__ = 'PropertyAttributeScopes'
     attribute_id = db.Column(db.Integer, db.ForeignKey('PropertyAttributes.id', ondelete='CASCADE'), primary_key=True)
     property_type_id = db.Column(db.Integer, db.ForeignKey('PropertyTypes.id', ondelete='CASCADE'), primary_key=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
     
     attribute = db.relationship('PropertyAttribute', back_populates='scopes')
     property_type = db.relationship('PropertyType', back_populates='attribute_scopes')

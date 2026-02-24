@@ -551,10 +551,14 @@ def get_property_type_scopes(property_type_id):
 @admin_bp.route('/property_type_scopes/<int:property_type_id>', methods=['POST'])
 def update_property_type_scopes(property_type_id):
     data = request.get_json()
-    attr_ids = data.get('attribute_ids', [])
+    attr_ids = data.get('attribute_ids', [])  # List is ordered — index = sort_order
     PropertyAttributeScope.query.filter_by(property_type_id=property_type_id).delete()
-    for aid in attr_ids:
-        db.session.add(PropertyAttributeScope(property_type_id=property_type_id, attribute_id=aid))
+    for idx, aid in enumerate(attr_ids):
+        db.session.add(PropertyAttributeScope(
+            property_type_id=property_type_id,
+            attribute_id=aid,
+            sort_order=idx
+        ))
     db.session.commit()
     return jsonify({'message': 'Scopes mis à jour.'}), 200
 
@@ -588,9 +592,12 @@ def get_property_types_with_attributes():
         pt_dict = pt.to_dict()
         pt_dict['attributes'] = []
         
-        for scope in pt.attribute_scopes:
+        # Sort scopes by sort_order before building the attributes list
+        sorted_scopes = sorted(pt.attribute_scopes, key=lambda s: s.sort_order)
+        for scope in sorted_scopes:
             attribute = scope.attribute
             attr_dict = attribute.to_dict() # Les options sont déjà chargées
+            attr_dict['sort_order'] = scope.sort_order  # Include for client use
             pt_dict['attributes'].append(attr_dict)
             
         result.append(pt_dict)
