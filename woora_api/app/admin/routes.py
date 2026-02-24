@@ -147,7 +147,7 @@ def get_dashboard_stats():
     
     # 1. Basic Counters
     user_count = User.query.count()
-    property_count = Property.query.count()  # Compte global
+    property_count = Property.query.filter(Property.deleted_at == None).count()  # Exclure les biens soft-deleted
     pending_visits = VisitRequest.query.filter_by(status='pending').count()
     
     # 2. Total Revenue (Transactions of type 'payment')
