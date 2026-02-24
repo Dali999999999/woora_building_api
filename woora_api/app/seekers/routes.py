@@ -85,23 +85,16 @@ def get_all_properties_for_seeker():
     except (ValueError, TypeError):
         pass
 
-    # --- 3. Filtres "Flous" (Score de Pertinence) ---
-    # Au lieu d'exclure, on calcule un SCORE. Plus le bien a d'attributs correspondants, plus le score est élevé.
-    
-    relevance_score = 0
-    filter_active = False
-
+    # --- 3. Filtres Dynamiques (Stricts avec EAV) ---
+    # Pour chaque filtre dynamique reçu, on exige que la propriété possède cet attribut ET cette valeur.
     filters_json = request.args.get('filters')
     if filters_json:
         try:
             dynamic_filters = json.loads(filters_json)
             if isinstance(dynamic_filters, dict) and dynamic_filters:
-                filter_active = True
-                
                 from app.models import PropertyValue, PropertyAttribute
-                from sqlalchemy import select, and_
+                from sqlalchemy import and_, or_, func, cast, String
                 
-                conditions = []
                 for key, value in dynamic_filters.items():
                     val_str = str(value).lower()
                     if val_str in ['true', '1', 'oui', 'yes']:
@@ -109,7 +102,7 @@ def get_all_properties_for_seeker():
                     elif val_str in ['false', '0', 'non', 'no']:
                         bool_cond = PropertyValue.value_boolean == False
                     else:
-                        bool_cond = False # Ne pas matcher un boolean si ce n'est pas une valeur booléenne textuelle
+                        bool_cond = False # Ne pas matcher un boolean si ce n'est pas textuel
                         
                     cond = and_(
                         func.lower(PropertyAttribute.name) == key.lower().strip(),
@@ -120,32 +113,23 @@ def get_all_properties_for_seeker():
                             bool_cond
                         )
                     )
-                    conditions.append(cond)
-                
-                if conditions:
-                    subq = select(func.count(PropertyValue.id)).join(
-                        PropertyAttribute, PropertyValue.attribute_id == PropertyAttribute.id
-                    ).where(
-                        and_(
-                            PropertyValue.property_id == Property.id,
-                            or_(*conditions)
-                        )
-                    ).scalar_subquery()
                     
-                    relevance_score = subq
+                    # On exige que CET attribut avec CETTE valeur existe pour ce bien
+                    has_attr = db.session.query(PropertyValue.id).join(
+                        PropertyAttribute, PropertyValue.attribute_id == PropertyAttribute.id
+                    ).filter(
+                        PropertyValue.property_id == Property.id,
+                        cond
+                    ).exists()
+                    
+                    base_query = base_query.filter(has_attr)
+
         except json.JSONDecodeError:
             pass
 
     # --- 4. Tri et Pagination ---
-    
-    # Si des filtres dynamiques sont actifs, on trie par Score décroissant, puis par date
-    if filter_active:
-        # On ne garde que ceux qui ont au moins 1 point de pertinence (Optionnel, ou un seuil "Fuzzy")
-        # Ici on trie simplement par score.
-        query = base_query.order_by(desc(relevance_score), Property.created_at.desc())
-    else:
-        # Sinon tri par date classique
-        query = base_query.order_by(Property.created_at.desc())
+    # Tri par date classique
+    query = base_query.order_by(Property.created_at.desc())
 
     # Pagination DB stricte
     page = request.args.get('page', 1, type=int)

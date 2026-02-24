@@ -84,30 +84,49 @@ def get_all_properties_for_agent():
     except (ValueError, TypeError):
         pass
 
-    # --- 3. Filtres "Flous" (Score de Pertinence) ---
-    relevance_score = 0
-    filter_active = False
-
+    # --- 3. Filtres Dynamiques (Stricts avec EAV) ---
     filters_json = request.args.get('filters')
     if filters_json:
         try:
             dynamic_filters = json.loads(filters_json)
             if isinstance(dynamic_filters, dict) and dynamic_filters:
-                filter_active = True
+                from app.models import PropertyValue, PropertyAttribute
+                from sqlalchemy import and_, or_, func, cast, String
+                
                 for key, value in dynamic_filters.items():
-                    attr_value = func.json_unquote(func.json_extract(Property.attributes, f'$.{key}'))
-                    relevance_score += case(
-                        (attr_value == str(value), 1),
-                        else_=0
+                    val_str = str(value).lower()
+                    if val_str in ['true', '1', 'oui', 'yes']:
+                        bool_cond = PropertyValue.value_boolean == True
+                    elif val_str in ['false', '0', 'non', 'no']:
+                        bool_cond = PropertyValue.value_boolean == False
+                    else:
+                        bool_cond = False # Ne pas matcher un boolean si ce n'est pas textuel
+                        
+                    cond = and_(
+                        func.lower(PropertyAttribute.name) == key.lower().strip(),
+                        or_(
+                            func.lower(PropertyValue.value_string) == val_str,
+                            cast(PropertyValue.value_integer, String) == str(value),
+                            cast(PropertyValue.value_decimal, String) == str(value),
+                            bool_cond
+                        )
                     )
+                    
+                    # On exige que CET attribut avec CETTE valeur existe pour ce bien
+                    has_attr = db.session.query(PropertyValue.id).join(
+                        PropertyAttribute, PropertyValue.attribute_id == PropertyAttribute.id
+                    ).filter(
+                        PropertyValue.property_id == Property.id,
+                        cond
+                    ).exists()
+                    
+                    base_query = base_query.filter(has_attr)
+
         except json.JSONDecodeError:
             pass
 
     # --- 4. Tri et Pagination ---
-    if filter_active:
-        query = base_query.order_by(desc(relevance_score), Property.created_at.desc())
-    else:
-        query = base_query.order_by(Property.created_at.desc())
+    query = base_query.order_by(Property.created_at.desc())
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     properties = pagination.items
