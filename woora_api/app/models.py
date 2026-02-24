@@ -277,6 +277,26 @@ class Property(db.Model):
         if not attributes_dict and self.attributes:
             attributes_dict = self.attributes.copy()
             
+        # Re-inject system keys for backward compatibility with the mobile app
+        # The mobile app expects these inside the 'attributes' JSON object.
+        attributes_dict['title'] = self.title
+        attributes_dict['description'] = self.description
+        if self.price is not None:
+            attributes_dict['price'] = float(self.price)
+        if self.property_status:
+            attributes_dict['status'] = self.property_status.name
+        elif self.status: # Fallback au champ brut
+            attributes_dict['status'] = self.status
+            
+        attributes_dict['address'] = self.address
+        attributes_dict['city'] = self.city
+        attributes_dict['postal_code'] = self.postal_code
+        if self.latitude is not None:
+            attributes_dict['latitude'] = float(self.latitude)
+        if self.longitude is not None:
+            attributes_dict['longitude'] = float(self.longitude)
+        attributes_dict['property_type_id'] = self.property_type_id
+            
         base_data['attributes'] = attributes_dict
         base_data['image_urls'] = [image.image_url for image in self.images]
         base_data['property_type'] = {'id': self.property_type.id, 'name': self.property_type.name} if self.property_type else None
