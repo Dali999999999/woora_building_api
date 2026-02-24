@@ -193,9 +193,8 @@ def create_property():
         city=city,
         postal_code=postal_code,
         latitude=latitude,
-        longitude=longitude,
-        attributes=dynamic_attributes
-    )
+        longitude=longitude
+        # JSON attributes mapping removed in favor of 100% EAV architecture
     try:
         current_app.logger.debug(f"Nouvelle propriété créée (avant commit): {new_property}")
 
@@ -375,15 +374,7 @@ def update_owner_property(property_id):
             except (ValueError, TypeError):
                 return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
 
-        # 2. Mise à jour du champ DYNAMIQUE (colonne JSON 'attributes')
-        if property.attributes is None:
-            property.attributes = {}
-        
-        # On fusionne les nouvelles données dans le champ JSON existant
-        property.attributes.update(attributes_data)
-        
-        # On force SQLAlchemy à détecter que le contenu du champ JSON a été modifié
-        flag_modified(property, "attributes")
+        # JSON attributes column update removed (Phase 2 - EAV Architecture Migration)
 
     # La gestion des images reste la même, elle est correcte
     if 'image_urls' in data:

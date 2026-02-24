@@ -69,14 +69,26 @@ def find_matches_for_property(property_id):
             except json.JSONDecodeError:
                 request_details = {}
                 
-            prop_attributes = prop.attributes if prop.attributes else {}
+            prop_attributes = {}
+            for pv in prop.property_values:
+                attr_name = pv.attribute.name if pv.attribute else None
+                if not attr_name:
+                    continue
+                if pv.value_boolean is not None:
+                    prop_attributes[attr_name.lower()] = pv.value_boolean
+                elif pv.value_integer is not None:
+                    prop_attributes[attr_name.lower()] = pv.value_integer
+                elif pv.value_decimal is not None:
+                    prop_attributes[attr_name.lower()] = float(pv.value_decimal)
+                elif pv.value_string is not None:
+                    prop_attributes[attr_name.lower()] = pv.value_string
             
             for key, req_val in request_details.items():
                 if key not in ['city', 'min_price', 'max_price'] and req_val is not None and str(req_val).strip() != '':
                     total_criteria += 1
                     
                     # On cherche la correspondance dans les attributs du bien
-                    prop_val = prop_attributes.get(key)
+                    prop_val = prop_attributes.get(key.lower())
                     
                     # Logique de comparaison flexible (ex: texte, nombre)
                     if prop_val is not None:

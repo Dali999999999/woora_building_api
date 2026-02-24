@@ -1318,13 +1318,7 @@ def update_property_by_admin(property_id):
         except (ValueError, TypeError):
              return jsonify({'message': 'longitude invalide.'}), 400
 
-    # 2. Mise à jour du champ JSON attributes (pour les champs dynamiques)
-    if attributes_data:
-        if property.attributes is None:
-            property.attributes = {}
-        
-        property.attributes.update(attributes_data)
-        flag_modified(property, "attributes")
+    # 2. JSON attributes column update removed (Phase 2 - EAV Architecture Migration)
 
     # 3. Gestion des images
     if 'image_urls' in data:

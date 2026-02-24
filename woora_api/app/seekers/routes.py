@@ -97,18 +97,42 @@ def get_all_properties_for_seeker():
             dynamic_filters = json.loads(filters_json)
             if isinstance(dynamic_filters, dict) and dynamic_filters:
                 filter_active = True
+                
+                from app.models import PropertyValue, PropertyAttribute
+                from sqlalchemy import select, and_
+                
+                conditions = []
                 for key, value in dynamic_filters.items():
-                    # On utilise JSON_UNQUOTE(JSON_EXTRACT(...)) via func.json_extract
-                    # Note : La syntaxe dépend du dialecte SQL (ici MySQL/MariaDB)
-                    # Property.attributes[key] fonctionne souvent avec SQLAlchemy moderne comme json_extract
-                    
-                    # On ajoute 1 point si la valeur correspond (en castant en string pour être sûr)
-                    # Syntaxe SQLAlchemy générique pour JSON :
-                    attr_value = func.json_unquote(func.json_extract(Property.attributes, f'$.{key}'))
-                    relevance_score += case(
-                        (attr_value == str(value), 1),
-                        else_=0
+                    val_str = str(value).lower()
+                    if val_str in ['true', '1', 'oui', 'yes']:
+                        bool_cond = PropertyValue.value_boolean == True
+                    elif val_str in ['false', '0', 'non', 'no']:
+                        bool_cond = PropertyValue.value_boolean == False
+                    else:
+                        bool_cond = False # Ne pas matcher un boolean si ce n'est pas une valeur booléenne textuelle
+                        
+                    cond = and_(
+                        func.lower(PropertyAttribute.name) == key.lower().strip(),
+                        or_(
+                            func.lower(PropertyValue.value_string) == val_str,
+                            cast(PropertyValue.value_integer, String) == str(value),
+                            cast(PropertyValue.value_decimal, String) == str(value),
+                            bool_cond
+                        )
                     )
+                    conditions.append(cond)
+                
+                if conditions:
+                    subq = select(func.count(PropertyValue.id)).join(
+                        PropertyAttribute, PropertyValue.attribute_id == PropertyAttribute.id
+                    ).where(
+                        and_(
+                            PropertyValue.property_id == Property.id,
+                            or_(*conditions)
+                        )
+                    ).scalar_subquery()
+                    
+                    relevance_score = subq
         except json.JSONDecodeError:
             pass
 

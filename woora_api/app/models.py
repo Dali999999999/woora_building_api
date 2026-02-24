@@ -257,7 +257,7 @@ class Property(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
         
-        # Build attributes dynamically from EAV PropertyValues table
+        # Build attributes dynamically EXCLUSIVELY from the EAV PropertyValues table
         attributes_dict = {}
         for pv in self.property_values:
             attr_name = pv.attribute.name if pv.attribute else None
@@ -272,13 +272,8 @@ class Property(db.Model):
                 attributes_dict[attr_name] = float(pv.value_decimal)
             elif pv.value_string is not None:
                 attributes_dict[attr_name] = pv.value_string
-
-        # Fallback to the old JSON attributes only if EAV is empty for some reason (smooth transition)
-        if not attributes_dict and self.attributes:
-            attributes_dict = self.attributes.copy()
-            
-        # Re-inject system keys for backward compatibility with the mobile app
-        # The mobile app expects these inside the 'attributes' JSON object.
+                
+        # Inject system keys (mobile app backward compatibility)
         attributes_dict['title'] = self.title
         attributes_dict['description'] = self.description
         if self.price is not None:
@@ -403,7 +398,9 @@ class VisitRequest(db.Model):
             'status': self.status,
             'message': self.message,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'customer': self.customer.to_dict() if self.customer else None,
+            'seeker_id': self.customer_id, # FIX: Added seeker_id mapping for Admin Panel
+            'seeker': self.customer.to_dict() if self.customer else None, # FIX: Added seeker mapping for Admin Panel
+            'customer': self.customer.to_dict() if self.customer else None, # Kept for retro compatibility
             'property': self.property.to_dict() if self.property else None,
             'referral': {
                 'id': self.referral.id,
@@ -460,13 +457,26 @@ class PropertyRequest(db.Model):
                         'is_read': match.is_read
                     })
 
+        # For Admin Panel PropertyRequest.criteria mapping
+        import json
+        criteria_dict = {}
+        try:
+            criteria_dict = json.loads(self.request_details) if self.request_details else {}
+        except json.JSONDecodeError:
+            pass
+
         return {
-            'id': self.id, 'customer_id': self.customer_id, 'request_details': self.request_details,
-            'city': self.city, 'property_type_id': self.property_type_id,
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'user_id': self.customer_id, # FIX: Added user_id mapping for Admin Panel
+            'property_type_id': self.property_type_id,
             'property_type_name': self.property_type.name if self.property_type else "Tous types",
+            'city': self.city,
             'min_price': float(self.min_price) if self.min_price is not None else None,
             'max_price': float(self.max_price) if self.max_price is not None else None,
-            'status': self.status, 
+            'request_details': self.request_details,
+            'criteria': criteria_dict, # FIX: Added parsed dictionary criteria for Admin panel
+            'status': self.status,
             'admin_notes': self.admin_notes,
             'admin_response': self.admin_notes,  # Alias pour l'app mobile
             'created_at': self.created_at.isoformat() if self.created_at else None,
