@@ -1340,6 +1340,15 @@ def update_property_by_admin(property_id):
                 display_order=i
             )
             db.session.add(new_image)
+            
+    # --- NEW EAV MIGRATION LOGIC ---
+    # Sauvegarde robuste des caractéristiques dans la nouvelle table PropertyValues
+    try:
+        save_property_eav_values(property.id, attributes_data)
+    except Exception as e:
+        current_app.logger.error(f"EAV Saving failed: {e}")
+        raise e
+    # -------------------------------
 
     try:
         db.session.commit()

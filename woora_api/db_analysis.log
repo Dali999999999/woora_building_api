@@ -1,0 +1,1471 @@
+=== Property Types ===
+[1] F1 - Active: 1
+[3] F2  - Active: 1
+[4] F3  - Active: 1
+[5] F4  - Active: 1
+[6] F5_6  - Active: 1
+[7] Villa - Active: 1
+[27] Immeuble - Active: 1
+[28] Terrain - Active: 1
+[33] Magasin  - Active: 1
+[34] Dépôt / Hangard - Active: 1
+[36] Plateau de bureau  - Active: 1
+[37] Bazar - Active: 1
+[38] Mini studio - Active: 1
+
+=== Property Attributes ===
+[152] Ville (string)
+[153] Quartier (string)
+[154] Etat (enum)
+[155] Surface m2 (integer)
+[156] Standing (enum)
+[157] Etat terrain (enum)
+[158] Etat article (enum)
+[159] Utilisation (enum)
+[161] Type d'activité (enum)
+[162] Besoin de location (enum)
+[163] Date d'intégration (string)
+[164] Statut juridique (enum)
+[165] Observation (string)
+[166] Niveau d'étage (enum)
+[167] Nombre de salle de bain (enum)
+[168] Nombre d'étage (string)
+[169] Nombre d'appartement (string)
+[170] Nombre de chambre (string)
+[171] Nombre de pièces (string)
+[172] Balcon (boolean)
+[173] Terrasse (boolean)
+[174] Cours avant (boolean)
+[175] Cours arrière (boolean)
+[176] Jardin (boolean)
+[177] Chauffe eau (boolean)
+[178] Climatiseur (boolean)
+[179] Buanderie (boolean)
+[180] Patio (boolean)
+[181] Dressing (boolean)
+[182] Jacuzzi (boolean)
+[183] Toilette (enum)
+[184] Cuisine (enum)
+[185] Dépendance (boolean)
+[186] Espace de stockage (boolean)
+[187] Conciergerie (boolean)
+[188] Parking (boolean)
+[189] Ascenseur (boolean)
+[190] Gardiennage (boolean)
+[191] Système de sécurité (boolean)
+[192] Suppresseur (boolean)
+[193] Réservoir eau (boolean)
+[194] Groupe électrogène (boolean)
+[195] Installation électrique (boolean)
+[196] Système de drainage (boolean)
+[197] Dortoir (boolean)
+[198] Vestiaire (boolean)
+[199] Service d'entretien (boolean)
+[200] Livraison (enum)
+[201] Location voiture (boolean)
+[202] Coursier (boolean)
+[203] Assistance tourisme (boolean)
+[204] Supermarché, plage, Restaurant, Cinéma (string)
+[205] Banque DAB, Transport, Parc Monument (string)
+[206] Vue sur mer (boolean)
+[207] Piscine / Air de jeu (boolean)
+[208] Salle de sport (boolean)
+[210] WI-FI (boolean)
+[211] Référence id (string)
+[212] Ventilateur (boolean)
+[213] Position par rapport à la route (enum)
+[214] Type de cuisine (enum)
+[215] Nombre de salon (enum)
+[216] Nombre de cuisine (enum)
+[217] Eau incluse (boolean)
+[218] Electricité incluse (boolean)
+
+=== Attribute Scopes ===
+Type 1 -> Attr 152
+Type 3 -> Attr 152
+Type 4 -> Attr 152
+Type 5 -> Attr 152
+Type 6 -> Attr 152
+Type 7 -> Attr 152
+Type 27 -> Attr 152
+Type 28 -> Attr 152
+Type 33 -> Attr 152
+Type 34 -> Attr 152
+Type 36 -> Attr 152
+Type 37 -> Attr 152
+Type 38 -> Attr 152
+Type 1 -> Attr 153
+Type 3 -> Attr 153
+Type 4 -> Attr 153
+Type 5 -> Attr 153
+Type 6 -> Attr 153
+Type 7 -> Attr 153
+Type 27 -> Attr 153
+Type 28 -> Attr 153
+Type 33 -> Attr 153
+Type 34 -> Attr 153
+Type 36 -> Attr 153
+Type 37 -> Attr 153
+Type 38 -> Attr 153
+Type 1 -> Attr 154
+Type 3 -> Attr 154
+Type 4 -> Attr 154
+Type 5 -> Attr 154
+Type 6 -> Attr 154
+Type 7 -> Attr 154
+Type 27 -> Attr 154
+Type 33 -> Attr 154
+Type 36 -> Attr 154
+Type 38 -> Attr 154
+Type 1 -> Attr 155
+Type 3 -> Attr 155
+Type 4 -> Attr 155
+Type 5 -> Attr 155
+Type 6 -> Attr 155
+Type 7 -> Attr 155
+Type 27 -> Attr 155
+Type 28 -> Attr 155
+Type 33 -> Attr 155
+Type 34 -> Attr 155
+Type 36 -> Attr 155
+Type 38 -> Attr 155
+Type 1 -> Attr 156
+Type 3 -> Attr 156
+Type 4 -> Attr 156
+Type 5 -> Attr 156
+Type 6 -> Attr 156
+Type 7 -> Attr 156
+Type 27 -> Attr 156
+Type 33 -> Attr 156
+Type 36 -> Attr 156
+Type 37 -> Attr 156
+Type 38 -> Attr 156
+Type 28 -> Attr 157
+Type 37 -> Attr 158
+Type 1 -> Attr 159
+Type 3 -> Attr 159
+Type 4 -> Attr 159
+Type 5 -> Attr 159
+Type 6 -> Attr 159
+Type 7 -> Attr 159
+Type 27 -> Attr 159
+Type 28 -> Attr 159
+Type 33 -> Attr 159
+Type 34 -> Attr 159
+Type 36 -> Attr 159
+Type 38 -> Attr 159
+Type 1 -> Attr 161
+Type 3 -> Attr 161
+Type 4 -> Attr 161
+Type 5 -> Attr 161
+Type 6 -> Attr 161
+Type 7 -> Attr 161
+Type 27 -> Attr 161
+Type 28 -> Attr 161
+Type 33 -> Attr 161
+Type 34 -> Attr 161
+Type 36 -> Attr 161
+Type 38 -> Attr 161
+Type 1 -> Attr 162
+Type 3 -> Attr 162
+Type 4 -> Attr 162
+Type 5 -> Attr 162
+Type 6 -> Attr 162
+Type 7 -> Attr 162
+Type 27 -> Attr 162
+Type 33 -> Attr 162
+Type 34 -> Attr 162
+Type 36 -> Attr 162
+Type 38 -> Attr 162
+Type 1 -> Attr 163
+Type 3 -> Attr 163
+Type 4 -> Attr 163
+Type 5 -> Attr 163
+Type 6 -> Attr 163
+Type 7 -> Attr 163
+Type 27 -> Attr 163
+Type 28 -> Attr 163
+Type 33 -> Attr 163
+Type 34 -> Attr 163
+Type 36 -> Attr 163
+Type 38 -> Attr 163
+Type 3 -> Attr 164
+Type 4 -> Attr 164
+Type 5 -> Attr 164
+Type 6 -> Attr 164
+Type 7 -> Attr 164
+Type 27 -> Attr 164
+Type 28 -> Attr 164
+Type 34 -> Attr 164
+Type 36 -> Attr 164
+Type 38 -> Attr 164
+Type 1 -> Attr 165
+Type 3 -> Attr 165
+Type 4 -> Attr 165
+Type 5 -> Attr 165
+Type 6 -> Attr 165
+Type 7 -> Attr 165
+Type 27 -> Attr 165
+Type 28 -> Attr 165
+Type 33 -> Attr 165
+Type 34 -> Attr 165
+Type 36 -> Attr 165
+Type 37 -> Attr 165
+Type 38 -> Attr 165
+Type 1 -> Attr 166
+Type 3 -> Attr 166
+Type 4 -> Attr 166
+Type 5 -> Attr 166
+Type 6 -> Attr 166
+Type 33 -> Attr 166
+Type 36 -> Attr 166
+Type 38 -> Attr 166
+Type 3 -> Attr 167
+Type 4 -> Attr 167
+Type 5 -> Attr 167
+Type 6 -> Attr 167
+Type 7 -> Attr 167
+Type 27 -> Attr 167
+Type 33 -> Attr 167
+Type 34 -> Attr 167
+Type 36 -> Attr 167
+Type 38 -> Attr 167
+Type 7 -> Attr 168
+Type 27 -> Attr 168
+Type 36 -> Attr 168
+Type 7 -> Attr 169
+Type 27 -> Attr 169
+Type 36 -> Attr 169
+Type 7 -> Attr 170
+Type 27 -> Attr 170
+Type 28 -> Attr 171
+Type 33 -> Attr 171
+Type 34 -> Attr 171
+Type 36 -> Attr 171
+Type 1 -> Attr 172
+Type 3 -> Attr 172
+Type 4 -> Attr 172
+Type 5 -> Attr 172
+Type 6 -> Attr 172
+Type 7 -> Attr 172
+Type 27 -> Attr 172
+Type 33 -> Attr 172
+Type 36 -> Attr 172
+Type 38 -> Attr 172
+Type 1 -> Attr 173
+Type 3 -> Attr 173
+Type 4 -> Attr 173
+Type 5 -> Attr 173
+Type 6 -> Attr 173
+Type 7 -> Attr 173
+Type 27 -> Attr 173
+Type 33 -> Attr 173
+Type 36 -> Attr 173
+Type 38 -> Attr 173
+Type 3 -> Attr 174
+Type 4 -> Attr 174
+Type 5 -> Attr 174
+Type 6 -> Attr 174
+Type 7 -> Attr 174
+Type 27 -> Attr 174
+Type 33 -> Attr 174
+Type 36 -> Attr 174
+Type 38 -> Attr 174
+Type 3 -> Attr 175
+Type 4 -> Attr 175
+Type 5 -> Attr 175
+Type 6 -> Attr 175
+Type 7 -> Attr 175
+Type 27 -> Attr 175
+Type 33 -> Attr 175
+Type 36 -> Attr 175
+Type 38 -> Attr 175
+Type 3 -> Attr 176
+Type 4 -> Attr 176
+Type 5 -> Attr 176
+Type 6 -> Attr 176
+Type 7 -> Attr 176
+Type 27 -> Attr 176
+Type 33 -> Attr 176
+Type 36 -> Attr 176
+Type 38 -> Attr 176
+Type 1 -> Attr 177
+Type 3 -> Attr 177
+Type 4 -> Attr 177
+Type 5 -> Attr 177
+Type 6 -> Attr 177
+Type 7 -> Attr 177
+Type 27 -> Attr 177
+Type 28 -> Attr 177
+Type 38 -> Attr 177
+Type 1 -> Attr 178
+Type 3 -> Attr 178
+Type 4 -> Attr 178
+Type 5 -> Attr 178
+Type 6 -> Attr 178
+Type 7 -> Attr 178
+Type 27 -> Attr 178
+Type 28 -> Attr 178
+Type 33 -> Attr 178
+Type 36 -> Attr 178
+Type 38 -> Attr 178
+Type 1 -> Attr 179
+Type 3 -> Attr 179
+Type 4 -> Attr 179
+Type 5 -> Attr 179
+Type 6 -> Attr 179
+Type 7 -> Attr 179
+Type 27 -> Attr 179
+Type 38 -> Attr 179
+Type 3 -> Attr 180
+Type 4 -> Attr 180
+Type 5 -> Attr 180
+Type 6 -> Attr 180
+Type 7 -> Attr 180
+Type 27 -> Attr 180
+Type 36 -> Attr 180
+Type 38 -> Attr 180
+Type 1 -> Attr 181
+Type 3 -> Attr 181
+Type 4 -> Attr 181
+Type 5 -> Attr 181
+Type 6 -> Attr 181
+Type 7 -> Attr 181
+Type 27 -> Attr 181
+Type 38 -> Attr 181
+Type 3 -> Attr 182
+Type 4 -> Attr 182
+Type 5 -> Attr 182
+Type 6 -> Attr 182
+Type 7 -> Attr 182
+Type 27 -> Attr 182
+Type 38 -> Attr 182
+Type 1 -> Attr 183
+Type 38 -> Attr 183
+Type 1 -> Attr 184
+Type 38 -> Attr 184
+Type 4 -> Attr 185
+Type 5 -> Attr 185
+Type 6 -> Attr 185
+Type 7 -> Attr 185
+Type 27 -> Attr 185
+Type 3 -> Attr 186
+Type 4 -> Attr 186
+Type 5 -> Attr 186
+Type 6 -> Attr 186
+Type 7 -> Attr 186
+Type 27 -> Attr 186
+Type 28 -> Attr 186
+Type 33 -> Attr 186
+Type 36 -> Attr 186
+Type 38 -> Attr 186
+Type 1 -> Attr 187
+Type 3 -> Attr 187
+Type 4 -> Attr 187
+Type 5 -> Attr 187
+Type 6 -> Attr 187
+Type 7 -> Attr 187
+Type 27 -> Attr 187
+Type 28 -> Attr 187
+Type 33 -> Attr 187
+Type 34 -> Attr 187
+Type 36 -> Attr 187
+Type 38 -> Attr 187
+Type 1 -> Attr 188
+Type 3 -> Attr 188
+Type 4 -> Attr 188
+Type 5 -> Attr 188
+Type 6 -> Attr 188
+Type 7 -> Attr 188
+Type 27 -> Attr 188
+Type 28 -> Attr 188
+Type 33 -> Attr 188
+Type 34 -> Attr 188
+Type 36 -> Attr 188
+Type 38 -> Attr 188
+Type 1 -> Attr 189
+Type 3 -> Attr 189
+Type 4 -> Attr 189
+Type 5 -> Attr 189
+Type 6 -> Attr 189
+Type 27 -> Attr 189
+Type 36 -> Attr 189
+Type 38 -> Attr 189
+Type 1 -> Attr 190
+Type 3 -> Attr 190
+Type 4 -> Attr 190
+Type 5 -> Attr 190
+Type 6 -> Attr 190
+Type 7 -> Attr 190
+Type 27 -> Attr 190
+Type 28 -> Attr 190
+Type 33 -> Attr 190
+Type 34 -> Attr 190
+Type 36 -> Attr 190
+Type 38 -> Attr 190
+Type 1 -> Attr 191
+Type 3 -> Attr 191
+Type 4 -> Attr 191
+Type 5 -> Attr 191
+Type 6 -> Attr 191
+Type 7 -> Attr 191
+Type 27 -> Attr 191
+Type 28 -> Attr 191
+Type 33 -> Attr 191
+Type 34 -> Attr 191
+Type 36 -> Attr 191
+Type 38 -> Attr 191
+Type 1 -> Attr 192
+Type 3 -> Attr 192
+Type 4 -> Attr 192
+Type 5 -> Attr 192
+Type 6 -> Attr 192
+Type 7 -> Attr 192
+Type 27 -> Attr 192
+Type 28 -> Attr 192
+Type 33 -> Attr 192
+Type 34 -> Attr 192
+Type 36 -> Attr 192
+Type 38 -> Attr 192
+Type 1 -> Attr 193
+Type 3 -> Attr 193
+Type 4 -> Attr 193
+Type 5 -> Attr 193
+Type 6 -> Attr 193
+Type 7 -> Attr 193
+Type 27 -> Attr 193
+Type 28 -> Attr 193
+Type 33 -> Attr 193
+Type 34 -> Attr 193
+Type 36 -> Attr 193
+Type 38 -> Attr 193
+Type 1 -> Attr 194
+Type 3 -> Attr 194
+Type 4 -> Attr 194
+Type 5 -> Attr 194
+Type 6 -> Attr 194
+Type 7 -> Attr 194
+Type 27 -> Attr 194
+Type 28 -> Attr 194
+Type 33 -> Attr 194
+Type 34 -> Attr 194
+Type 36 -> Attr 194
+Type 38 -> Attr 194
+Type 28 -> Attr 195
+Type 34 -> Attr 195
+Type 28 -> Attr 196
+Type 34 -> Attr 196
+Type 28 -> Attr 197
+Type 33 -> Attr 197
+Type 34 -> Attr 197
+Type 28 -> Attr 198
+Type 33 -> Attr 198
+Type 34 -> Attr 198
+Type 3 -> Attr 199
+Type 4 -> Attr 199
+Type 5 -> Attr 199
+Type 6 -> Attr 199
+Type 7 -> Attr 199
+Type 27 -> Attr 199
+Type 28 -> Attr 199
+Type 33 -> Attr 199
+Type 34 -> Attr 199
+Type 36 -> Attr 199
+Type 38 -> Attr 199
+Type 37 -> Attr 200
+Type 1 -> Attr 201
+Type 3 -> Attr 201
+Type 4 -> Attr 201
+Type 5 -> Attr 201
+Type 6 -> Attr 201
+Type 7 -> Attr 201
+Type 27 -> Attr 201
+Type 28 -> Attr 201
+Type 33 -> Attr 201
+Type 34 -> Attr 201
+Type 36 -> Attr 201
+Type 38 -> Attr 201
+Type 1 -> Attr 202
+Type 3 -> Attr 202
+Type 4 -> Attr 202
+Type 5 -> Attr 202
+Type 6 -> Attr 202
+Type 7 -> Attr 202
+Type 27 -> Attr 202
+Type 28 -> Attr 202
+Type 33 -> Attr 202
+Type 34 -> Attr 202
+Type 36 -> Attr 202
+Type 37 -> Attr 202
+Type 38 -> Attr 202
+Type 1 -> Attr 203
+Type 3 -> Attr 203
+Type 4 -> Attr 203
+Type 5 -> Attr 203
+Type 6 -> Attr 203
+Type 7 -> Attr 203
+Type 27 -> Attr 203
+Type 28 -> Attr 203
+Type 33 -> Attr 203
+Type 38 -> Attr 203
+Type 1 -> Attr 204
+Type 3 -> Attr 204
+Type 4 -> Attr 204
+Type 5 -> Attr 204
+Type 6 -> Attr 204
+Type 7 -> Attr 204
+Type 27 -> Attr 204
+Type 28 -> Attr 204
+Type 33 -> Attr 204
+Type 34 -> Attr 204
+Type 36 -> Attr 204
+Type 38 -> Attr 204
+Type 1 -> Attr 205
+Type 3 -> Attr 205
+Type 4 -> Attr 205
+Type 5 -> Attr 205
+Type 6 -> Attr 205
+Type 7 -> Attr 205
+Type 27 -> Attr 205
+Type 28 -> Attr 205
+Type 33 -> Attr 205
+Type 34 -> Attr 205
+Type 36 -> Attr 205
+Type 38 -> Attr 205
+Type 1 -> Attr 206
+Type 3 -> Attr 206
+Type 4 -> Attr 206
+Type 5 -> Attr 206
+Type 6 -> Attr 206
+Type 7 -> Attr 206
+Type 27 -> Attr 206
+Type 36 -> Attr 206
+Type 38 -> Attr 206
+Type 1 -> Attr 207
+Type 3 -> Attr 207
+Type 4 -> Attr 207
+Type 5 -> Attr 207
+Type 6 -> Attr 207
+Type 7 -> Attr 207
+Type 27 -> Attr 207
+Type 36 -> Attr 207
+Type 38 -> Attr 207
+Type 1 -> Attr 208
+Type 3 -> Attr 208
+Type 4 -> Attr 208
+Type 5 -> Attr 208
+Type 6 -> Attr 208
+Type 7 -> Attr 208
+Type 27 -> Attr 208
+Type 36 -> Attr 208
+Type 38 -> Attr 208
+Type 1 -> Attr 210
+Type 3 -> Attr 210
+Type 4 -> Attr 210
+Type 5 -> Attr 210
+Type 6 -> Attr 210
+Type 7 -> Attr 210
+Type 27 -> Attr 210
+Type 36 -> Attr 210
+Type 38 -> Attr 210
+Type 1 -> Attr 211
+Type 3 -> Attr 211
+Type 4 -> Attr 211
+Type 5 -> Attr 211
+Type 6 -> Attr 211
+Type 7 -> Attr 211
+Type 27 -> Attr 211
+Type 28 -> Attr 211
+Type 33 -> Attr 211
+Type 34 -> Attr 211
+Type 36 -> Attr 211
+Type 37 -> Attr 211
+Type 38 -> Attr 211
+Type 1 -> Attr 212
+Type 3 -> Attr 212
+Type 4 -> Attr 212
+Type 5 -> Attr 212
+Type 6 -> Attr 212
+Type 7 -> Attr 212
+Type 27 -> Attr 212
+Type 36 -> Attr 212
+Type 38 -> Attr 212
+Type 1 -> Attr 213
+Type 3 -> Attr 213
+Type 4 -> Attr 213
+Type 5 -> Attr 213
+Type 6 -> Attr 213
+Type 7 -> Attr 213
+Type 27 -> Attr 213
+Type 28 -> Attr 213
+Type 33 -> Attr 213
+Type 34 -> Attr 213
+Type 36 -> Attr 213
+Type 38 -> Attr 213
+Type 1 -> Attr 214
+Type 3 -> Attr 214
+Type 4 -> Attr 214
+Type 5 -> Attr 214
+Type 6 -> Attr 214
+Type 7 -> Attr 214
+Type 27 -> Attr 214
+Type 36 -> Attr 214
+Type 38 -> Attr 214
+Type 7 -> Attr 215
+Type 7 -> Attr 216
+Type 1 -> Attr 217
+Type 1 -> Attr 218
+
+=== Analyzing 205 Properties JSON ===
+Property Type 6:
+  - price : int, float
+  - title : str
+  - status : str
+  - Cinéma  : bool
+  - Cuisine  : str
+  - Parking  : bool
+  - Station  : bool
+  - Quartier  : str
+  - Ascenseur  : bool
+  - Banque/DAB : bool
+  - Buanderie  : bool
+  - description : str
+  - Dépendance  : bool
+  - Gardiennage  : bool
+  - Suppresseur  : bool
+  - Surface (m2) : int
+  - jours_visite : str
+  - Conciergerie  : bool
+  - Supermarché  : bool
+  - Vide/Meublé  : str
+  - Restaurant/Bar : bool
+  - Type standing  : str
+  - Achat livraison : bool
+  - Disponibilité  : str
+  - horaires_visite : str
+  - Niveau d'étage  : str
+  - property_type_id : int
+  - Autre observation : str
+  - Location voiture  : bool
+  - Paiement facture  : bool
+  - Pour utilisation  : str
+  - Réservoir d'eau  : bool
+  - Type d'activité  : str
+  - Moyen de transport : str
+  - Nombre de chambre  : str
+  - Espace de stockage  : bool
+  - Assistance tourisme  : bool
+  - Date d'intégration  : str
+  - Service d'entretien  : bool
+  - Temps d'utilisation  : str
+  - Groupe électrogène  : bool
+  - Heure et Date de visite  : str
+  - Nombre de salle de bain  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Patio : bool
+  - Balcon : bool
+  - Piscine : bool
+  - Cuisine. : str
+  - Vue sur mer : bool
+  - Chauffe eau  : bool
+  - Climatiseur  : bool
+  - Salle de sport : bool
+  - Niveau.d'étage  : str
+  - Nombre de salle de bain : str
+  - Terrasse  : bool
+  - Arrière-cour : bool
+  - Niveau.d'étage : str
+  - Giillage porte et fenêtre  : bool
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Niveau d'étage : str
+  - Terrasse : bool
+  - Cours avant : bool
+  - Cours arrière : bool
+  - Chauffe eau : bool
+  - Climatiseur : bool
+  - Buanderie : bool
+  - Dressing : bool
+  - Jacuzzi : bool
+  - Dépendance : bool
+  - Espace de stockage : bool
+  - Conciergerie : bool
+  - Parking : bool
+  - Ascenseur : bool
+  - Gardiennage : bool
+  - Système de sécurité : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Groupe électrogène : bool
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - Ville : str
+  - Quartier : str
+  - Surface m2 : int
+  - Date d'intégration : str
+  - Observation : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Besoin de location : str
+  - Type de cuisine : str
+  - address : str
+  - city : str
+  - Ventilateur : bool
+Property Type 27:
+  - Patio : bool
+  - price : float
+  - title : str
+  - Balcon : bool
+  - status : str
+  - Parking  : bool
+  - Station  : bool
+  - Dressing  : bool
+  - Quartier  : str
+  - Terrasse  : bool
+  - Ascenseur  : bool
+  - Banque/DAB : bool
+  - Buanderie  : bool
+  - Cour avant  : bool
+  - description : str
+  - Dépendance  : bool
+  - Gardiennage  : bool
+  - Suppresseur  : bool
+  - Surface (m2) : int
+  - jours_visite : str
+  - Arrière-cour : bool
+  - Conciergerie  : bool
+  - Supermarché  : bool
+  - Vide/Meublé  : str
+  - Restaurant/Bar : bool
+  - Type standing  : str
+  - Disponibilité  : str
+  - horaires_visite : str
+  - property_type_id : int
+  - Autre observation : str
+  - Réservoir d'eau  : bool
+  - Type d'activité  : str
+  - Moyen de transport : str
+  - Nombre de chambre  : str
+  - Espace de stockage  : bool
+  - Date d'intégration  : str
+  - Service d'entretien  : bool
+  - Temps d'utilisation  : str
+  - Groupe électrogène  : bool
+  - Système de sécurité  : bool
+  - Heure et Date de visite  : str
+  - Nombre de salle de bain  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Plage  : bool
+  - Piscine : bool
+  - Cuisine  : str
+  - Vue sur mer : bool
+  - Nombre d'étage : str
+  - Nombre de salle de bain : str
+  - Cuisine. : str
+  - .Nombre d'étage : str
+  - Pour.utilisation. : str
+  - Nombre d'appartement  : str
+  - Giillage porte et fenêtre  : bool
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Type d'activité : str
+  - Besoin de location : str
+  - Statut juridique : str
+  - Chauffe eau : bool
+  - Piscine / Air de jeu : bool
+  - Ville : str
+  - Quartier : str
+  - Surface m2 : int
+  - Date d'intégration : str
+  - Observation : str
+  - Nombre d'appartement : str
+  - Nombre de chambre : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Type de cuisine : str
+  - Position par rapport à la route : str
+  - Ventilateur : bool
+  - Suppresseur : bool
+  - Jardin : bool
+  - Terrasse : bool
+  - Cours avant : bool
+  - Cours arrière : bool
+  - Climatiseur : bool
+  - WI-FI : bool
+  - Buanderie : bool
+  - Dressing : bool
+  - Jacuzzi : bool
+  - Dépendance : bool
+  - Espace de stockage : bool
+  - Conciergerie : bool
+  - Parking : bool
+  - Ascenseur : bool
+  - Réservoir eau : bool
+  - Groupe électrogène : bool
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+Property Type 28:
+  - price : int, float
+  - title : str
+  - status : int, str
+  - Quartier  : str
+  - Banque/DAB : bool
+  - description : str
+  - Surface (m2) : int
+  - jours_visite : str
+  - Disponibilité  : str
+  - horaires_visite : str
+  - property_type_id : int
+  - Autre observation : str
+  - Type d'activité  : str
+  - Moyen de transport : str
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Nu/Agricole/Viabilisé  : str
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Pour.utilisation. : str
+  - Transport disponible : str
+  - Vue sur mer : bool
+  - Etat terrain : str
+  - Utilisation : str
+  - Type d'activité : str
+  - Ville : str
+  - Quartier : str
+  - Observation : str
+  - Surface m2 : int
+  - Date d'intégration : str
+  - Nombre de pièces : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Statut juridique : str
+  - Location voiture : bool
+  - Coursier : bool
+  - Service d'entretien : bool
+  - Assistance tourisme : bool
+  - Position par rapport à la route : str
+  - Parking : bool
+  - Dortoir : bool
+  - address : str
+  - city : str
+  - postal_code : str
+Property Type 4:
+  - Patio : bool
+  - price : int, float
+  - title : str
+  - status : int, str
+  - Jardin  : bool
+  - Cuisine  : str
+  - Parking  : bool
+  - Quartier  : str
+  - Terrasse  : bool
+  - Buanderie  : bool
+  - Cour avant  : bool
+  - description : str
+  - jours_visite : str
+  - Arrière-cour : bool
+  - Vide/Meublé  : str
+  - Type standing  : str
+  - Disponibilité  : str
+  - horaires_visite : str
+  - Pour utilisation : str
+  - property_type_id : int
+  - Autre observation : str
+  - Type d'activité  : str
+  - Moyen de transport : str
+  - Nombre de chambre  : int, str
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Nombre de salle de bain : int, str
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Balcon : bool
+  - Suppresseur  : bool
+  - Niveau.d'étage  : str
+  - Pour.utilisation. : str
+  - Réservoir d'eau  : bool
+  - Transport disponible : str
+  - Cuisine. : str
+  - Dressing  : bool
+  - Ascenseur  : bool
+  - Conciergerie  : bool
+  - Groupe électrogène  : bool
+  - Surface (m2) : int
+  - Chauffe eau  : bool
+  - Jacuzzi  : bool
+  - Climatiseur  : bool
+  - Gardiennage  : bool
+  - Niveau.d'étage : str
+  - Dépendance  : bool
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Besoin de location : str
+  - Niveau d'étage : str
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - Location voiture : bool
+  - Service d'entretien : bool
+  - Type de cuisine : str
+  - Ville : str
+  - Quartier : str
+  - Date d'intégration : str
+  - Observation : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Chauffe eau : bool
+  - Espace de stockage : bool
+  - Réservoir eau : bool
+  - Groupe électrogène : bool
+  - Suppresseur : bool
+  - address : str
+  - city : str
+  - Buanderie : bool
+  - Dressing : bool
+  - Parking : bool
+  - Vue sur mer : bool
+  - Statut juridique : str
+  - Climatiseur : bool
+  - Dépendance : bool
+  - Conciergerie : bool
+  - Ascenseur : bool
+  - Ventilateur : bool
+Property Type 5:
+  - price : int, float
+  - title : str
+  - Balcon : bool
+  - status : int, str
+  - Piscine : bool
+  - Parking  : bool
+  - Dressing  : bool
+  - Quartier  : str
+  - Terrasse  : bool
+  - Ascenseur  : bool
+  - Buanderie  : bool
+  - Vue sur mer : bool
+  - description : str
+  - Gardiennage  : bool
+  - Suppresseur  : bool
+  - jours_visite : str
+  - Conciergerie  : bool
+  - Vide/Meublé  : str
+  - Salle de sport : bool
+  - Type standing  : str
+  - Disponibilité  : str
+  - horaires_visite : str
+  - Pour utilisation : str
+  - property_type_id : int
+  - Autre observation : str
+  - Réservoir d'eau  : bool
+  - Type d'activité  : str
+  - Nombre de chambre  : str
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Groupe électrogène  : bool
+  - Nombre de salle de bain : int, str
+  - Système de sécurité  : bool
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Cuisine. : str
+  - Niveau.d'étage  : str
+  - Transport disponible : str
+  - Patio : bool
+  - Chauffe eau  : bool
+  - Arrière-cour : bool
+  - Climatiseur  : bool
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Besoin de location : str
+  - Statut juridique : str
+  - Niveau d'étage : str
+  - Terrasse : bool
+  - Cours avant : bool
+  - Chauffe eau : bool
+  - Climatiseur : bool
+  - Buanderie : bool
+  - Dressing : bool
+  - Espace de stockage : bool
+  - Conciergerie : bool
+  - Parking : bool
+  - Ascenseur : bool
+  - Gardiennage : bool
+  - Système de sécurité : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Groupe électrogène : bool
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - Piscine / Air de jeu : bool
+  - WI-FI : bool
+  - Ventilateur : bool
+  - Ville : str
+  - Quartier : str
+  - Date d'intégration : str
+  - Observation : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Type de cuisine : str
+  - Surface m2 : int
+  - Cours arrière : bool
+  - Jacuzzi : bool
+  - Dépendance : bool
+  - address : str
+  - city : str
+Property Type 33:
+  - price : float
+  - title : str
+  - status : int, str
+  - Cuisine. : str
+  - Parking  : bool
+  - Quartier  : str
+  - Buanderie  : bool
+  - description : str
+  - Suppresseur  : bool
+  - jours_visite : str
+  - Vide/Meublé  : str
+  - Type standing  : str
+  - Disponibilité  : str
+  - Nombre d'étage : str
+  - horaires_visite : str
+  - Pour utilisation : str
+  - property_type_id : int
+  - Autre observation : str
+  - Réservoir d'eau  : bool
+  - Type d'activité  : str
+  - Nombre de pièces  : str
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Transport disponible : str
+  - Nombre de salle de bain : str
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Niveau.d'étage  : str
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Niveau d'étage : str
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - Ville : str
+  - Quartier : str
+  - Date d'intégration : str
+  - Observation : str
+  - Nombre de pièces : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Besoin de location : str
+  - Parking : bool
+  - Cours avant : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Surface m2 : int
+  - Type d'activité : str
+  - Conciergerie : bool
+Property Type 7:
+  - Patio : bool
+  - price : int, float
+  - title : str
+  - Balcon : bool
+  - status : int, str
+  - Jardin  : bool
+  - Piscine : bool
+  - Cuisine. : str
+  - Parking  : bool
+  - Dressing  : bool
+  - Quartier  : str
+  - Terrasse  : bool
+  - Buanderie  : bool
+  - Cour avant  : bool
+  - description : str
+  - Dépendance  : bool
+  - Gardiennage  : bool
+  - Suppresseur  : bool
+  - jours_visite : str
+  - Arrière-cour : bool
+  - Vide/Meublé  : str
+  - Salle de sport : bool
+  - Type standing  : str
+  - Disponibilité  : str
+  - Nombre d'étage : int, str
+  - horaires_visite : str
+  - Pour utilisation : str
+  - property_type_id : int
+  - Autre observation : str
+  - Réservoir d'eau  : bool
+  - Type d'activité  : str
+  - Nombre de chambre  : str
+  - Espace de stockage  : bool
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Transport disponible : str
+  - Groupe électrogène  : bool
+  - Nombre de salle de bain : str
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Grille de protection : bool
+  - Giillage porte et fenêtre  : bool
+  - Surface (m2) : int
+  - Pour.utilisation. : str
+  - Jacuzzi  : bool
+  - Chauffe eau  : bool
+  - Climatiseur  : bool
+  - .Nombre d'étage : str
+  - Nombre d'appartement  : str
+  - Terrasse : bool
+  - Buanderie : bool
+  - Statut juridique : str
+  - Type de cuisine : str
+  - Standing : str
+  - Ville : str
+  - Quartier : str
+  - Surface m2 : int
+  - Date d'intégration : str
+  - Observation : str
+  - Nombre d'appartement : int, str
+  - Nombre de chambre : int, str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Etat : str
+  - Utilisation : str
+  - Besoin de location : str
+  - Cours arrière : bool
+  - Cours avant : bool
+  - Jardin : bool
+  - Chauffe eau : bool
+  - Climatiseur : bool
+  - Dressing : bool
+  - Dépendance : bool
+  - Espace de stockage : bool
+  - Conciergerie : bool
+  - Parking : bool
+  - Gardiennage : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Groupe électrogène : bool
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - Nombre de salon : int, str
+  - Nombre de cuisine : int, str
+  - address : str
+  - city : str
+  - Système de sécurité : bool
+  - Position par rapport à la route : str
+  - Type d'activité : str
+  - Vue sur mer : bool
+  - Jacuzzi : bool
+  - Piscine / Air de jeu : bool
+  - Ventilateur : bool
+  - postal_code : str
+Property Type 1:
+  - price : int, float
+  - title : str
+  - status : str
+  - Quartier  : str
+  - description : str
+  - Suppresseur  : bool
+  - jours_visite : str
+  - Vide/Meublé  : str
+  - Type standing  : str
+  - Disponibilité  : str
+  - horaires_visite : str
+  - Niveau.d'étage  : str
+  - property_type_id : int
+  - Autre observation : str
+  - Pour.utilisation. : str
+  - Réservoir d'eau  : bool
+  - Type d'activité  : str
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Transport disponible : str
+  - Nombre de salle de bain : str
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Type d'activité : str
+  - Besoin de location : str
+  - Niveau d'étage : str
+  - Terrasse : bool
+  - Buanderie : bool
+  - Cuisine : str
+  - Parking : bool
+  - Ascenseur : bool
+  - Vue sur mer : bool
+  - Ville : str
+  - Quartier : str
+  - Surface m2 : int
+  - Date d'intégration : str
+  - Observation : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Dressing : bool
+  - Toilette : str
+  - Conciergerie : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - WI-FI : bool
+  - Ventilateur : bool
+  - Balcon : bool
+  - Chauffe eau : bool
+  - Climatiseur : bool
+  - Groupe électrogène : bool
+  - Gardiennage : bool
+  - Type de cuisine : str
+  - Eau incluse : bool
+  - Electricité incluse : bool
+  - address : str
+  - city : str
+Property Type 3:
+  - price : float
+  - title : str
+  - Balcon : bool
+  - status : int, str
+  - Cuisine. : str
+  - Parking  : bool
+  - Dressing  : bool
+  - Quartier  : str
+  - Buanderie  : bool
+  - description : str
+  - Chauffe eau  : bool
+  - Climatiseur  : bool
+  - Suppresseur  : bool
+  - jours_visite : str
+  - Vide/Meublé  : str
+  - Type standing  : str
+  - Disponibilité  : str
+  - horaires_visite : str
+  - Niveau.d'étage  : str
+  - property_type_id : int
+  - Autre observation : str
+  - Pour.utilisation. : str
+  - Réservoir d'eau  : bool
+  - Type d'activité  : str
+  - Nombre de chambre  : str
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Transport disponible : str
+  - Nombre de salle de bain : str
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Situation géographique  : str
+  - Point de repère localisation  : str
+  - Terrasse  : bool
+  - Ascenseur  : bool
+  - Vue sur mer : bool
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Besoin de location : str
+  - Niveau d'étage : str
+  - Chauffe eau : bool
+  - Climatiseur : bool
+  - Buanderie : bool
+  - Dressing : bool
+  - Conciergerie : bool
+  - Parking : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - Salle de sport : bool
+  - WI-FI : bool
+  - Ville : str
+  - Quartier : str
+  - Date d'intégration : str
+  - Observation : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Patio : bool
+  - Terrasse : bool
+  - Espace de stockage : bool
+  - Type de cuisine : str
+  - Ascenseur : bool
+  - Groupe électrogène : bool
+  - Gardiennage : bool
+  - Système de sécurité : bool
+  - address : str
+  - city : str
+  - postal_code : str
+  - Ventilateur : bool
+Property Type 34:
+  - price : int, float
+  - title : str
+  - status : int, str
+  - Quartier  : str
+  - description : str
+  - jours_visite : str
+  - Disponibilité  : str
+  - horaires_visite : str
+  - property_type_id : int
+  - Autre observation : str
+  - Type d'activité  : str
+  - Date d'intégration  : str
+  - Temps d'utilisation  : str
+  - Heure et Date de visite  : str
+  - Profil client souhaité  : str
+  - Point de repère localisation  : str
+  - Utilisation : str
+  - Besoin de location : str
+  - Nombre de salle de bain : str
+  - Parking : bool
+  - Réservoir eau : bool
+  - Suppresseur : bool
+  - Dortoir : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Service d'entretien : bool
+  - Vestiaire : bool
+  - Ville : str
+  - Quartier : str
+  - Surface m2 : int
+  - Date d'intégration : str
+  - Observation : str
+  - Nombre de pièces : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Conciergerie : bool
+  - Gardiennage : bool
+  - Système de sécurité : bool
+  - Groupe électrogène : bool
+  - Installation électrique : bool
+  - Système de drainage : bool
+  - address : str
+  - city : str
+Property Type 38:
+  - property_type_id : int
+  - title : str
+  - price : int, float
+  - status : str
+  - description : str
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Besoin de location : str
+  - Nombre de salle de bain : int, str
+  - Terrasse : bool
+  - Cours avant : bool
+  - Chauffe eau : bool
+  - Climatiseur : bool
+  - Buanderie : bool
+  - Patio : bool
+  - Dressing : bool
+  - Espace de stockage : bool
+  - Conciergerie : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Assistance tourisme : bool
+  - WI-FI : bool
+  - Type de cuisine : str
+  - Ville : str
+  - Quartier : str
+  - Date d'intégration : str
+  - Observation : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str
+  - Balcon : bool
+  - Toilette : str
+  - Niveau d'étage : str
+  - address : str
+  - city : str
+Property Type 37:
+  - property_type_id : int
+  - title : str
+  - price : float
+  - status : int, str
+  - description : str
+  - Standing : str
+  - Etat article : str
+  - Ville : str
+  - Quartier : str
+  - Observation : str
+  - Référence id : str
+  - Livraison : str
+  - Coursier : bool
+  - address : str
+  - city : str
+  - postal_code : str
+Property Type 36:
+  - property_type_id : int
+  - title : str
+  - price : float
+  - status : int
+  - description : str
+  - Etat : str
+  - Standing : str
+  - Utilisation : str
+  - Besoin de location : str
+  - Nombre de salle de bain : str
+  - Balcon : bool
+  - Terrasse : bool
+  - Climatiseur : bool
+  - Espace de stockage : bool
+  - Conciergerie : bool
+  - Parking : bool
+  - Ascenseur : bool
+  - Gardiennage : bool
+  - Système de sécurité : bool
+  - Suppresseur : bool
+  - Réservoir eau : bool
+  - Groupe électrogène : bool
+  - Service d'entretien : bool
+  - Location voiture : bool
+  - Coursier : bool
+  - Ville : str
+  - Quartier : str
+  - Date d'intégration : str
+  - Observation : str
+  - Nombre d'étage : str
+  - Nombre d'appartement : str
+  - Nombre de pièces : str
+  - Supermarché, plage, Restaurant, Cinéma : str
+  - Banque DAB, Transport, Parc Monument : str
+  - Référence id : str

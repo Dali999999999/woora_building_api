@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, current_app, request
 from app.models import Property, User, Referral, Commission, PropertyType, PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyImage, PropertyStatus, PropertyRequest
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.utils.helpers import generate_unique_referral_code
+from app.utils.eav_utils import save_property_eav_values
 from app import db
 import requests
 import os
@@ -1215,12 +1216,21 @@ def update_agent_created_property(property_id):
             except (ValueError, TypeError):
                 return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
 
-        # Mise à jour du champ JSON attributes
+        # Mise à jour du champ JSON attributes pour rétro-compatibilité temporaire
         if property.attributes is None:
             property.attributes = {}
         
         property.attributes.update(attributes_data)
         flag_modified(property, "attributes")
+
+        # --- NEW EAV MIGRATION LOGIC ---
+        # Sauvegarde robuste des caractéristiques dans la nouvelle table PropertyValues
+        try:
+            save_property_eav_values(property.id, attributes_data)
+        except Exception as e:
+            current_app.logger.error(f"EAV Saving failed: {e}")
+            raise e
+        # -------------------------------
 
     # Gestion des images (même logique que pour les propriétaires)
     if 'image_urls' in data:

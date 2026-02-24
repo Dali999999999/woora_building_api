@@ -141,6 +141,19 @@ class AttributeOption(db.Model):
     def to_dict(self):
         return {'id': self.id, 'attribute_id': self.attribute_id, 'option_value': self.option_value}
 
+class PropertyValue(db.Model):
+    __tablename__ = 'PropertyValues'
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
+    attribute_id = db.Column(db.Integer, db.ForeignKey('PropertyAttributes.id', ondelete='CASCADE'), nullable=False)
+    value_string = db.Column(db.String(255), nullable=True)
+    value_integer = db.Column(db.Integer, nullable=True)
+    value_boolean = db.Column(db.Boolean, nullable=True)
+    value_decimal = db.Column(db.Numeric(12, 2), nullable=True)
+
+    property = db.relationship('Property', back_populates='property_values', foreign_keys=[property_id])
+    attribute = db.relationship('PropertyAttribute')
+
 class PropertyAttributeScope(db.Model):
     __tablename__ = 'PropertyAttributeScopes'
     attribute_id = db.Column(db.Integer, db.ForeignKey('PropertyAttributes.id', ondelete='CASCADE'), primary_key=True)
@@ -217,6 +230,7 @@ class Property(db.Model):
 
     # Relations avec suppression en cascade
     images = db.relationship('PropertyImage', back_populates='property', cascade="all, delete-orphan")
+    property_values = db.relationship('PropertyValue', back_populates='property', cascade="all, delete-orphan")
     favorited_by = db.relationship('UserFavorite', back_populates='property', cascade="all, delete-orphan")
     referrals_received = db.relationship('Referral', back_populates='property', cascade="all, delete-orphan")
     visit_requests_received = db.relationship('VisitRequest', back_populates='property', cascade="all, delete-orphan")
@@ -242,7 +256,27 @@ class Property(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
-        attributes_dict = self.attributes.copy() if self.attributes else {}
+        
+        # Build attributes dynamically from EAV PropertyValues table
+        attributes_dict = {}
+        for pv in self.property_values:
+            attr_name = pv.attribute.name if pv.attribute else None
+            if not attr_name:
+                continue
+                
+            if pv.value_boolean is not None:
+                attributes_dict[attr_name] = pv.value_boolean
+            elif pv.value_integer is not None:
+                attributes_dict[attr_name] = pv.value_integer
+            elif pv.value_decimal is not None:
+                attributes_dict[attr_name] = float(pv.value_decimal)
+            elif pv.value_string is not None:
+                attributes_dict[attr_name] = pv.value_string
+
+        # Fallback to the old JSON attributes only if EAV is empty for some reason (smooth transition)
+        if not attributes_dict and self.attributes:
+            attributes_dict = self.attributes.copy()
+            
         base_data['attributes'] = attributes_dict
         base_data['image_urls'] = [image.image_url for image in self.images]
         base_data['property_type'] = {'id': self.property_type.id, 'name': self.property_type.name} if self.property_type else None

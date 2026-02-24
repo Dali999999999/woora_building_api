@@ -9,9 +9,9 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
 from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
 # from app.utils.mega_utils import get_mega_instance # REMOVED: Migration Cloudinary
+from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
+from app.utils.eav_utils import save_property_eav_values
 from werkzeug.utils import secure_filename
-import os
-import uuid
 
 UPLOAD_FOLDER = '/tmp' # Définir le dossier d'upload
 
@@ -202,6 +202,15 @@ def create_property():
         db.session.add(new_property)
         db.session.flush()
         current_app.logger.debug(f"ID de la nouvelle propriété après flush: {new_property.id}")
+        
+        # --- NEW EAV MIGRATION LOGIC ---
+        # Sauvegarde robuste des caractéristiques dans la nouvelle table PropertyValues
+        try:
+            save_property_eav_values(new_property.id, dynamic_attributes)
+        except Exception as e:
+            current_app.logger.error(f"EAV Saving failed: {e}")
+            raise e
+        # -------------------------------
 
         image_urls = data.get('image_urls', [])
         current_app.logger.debug(f"URLs d'images à enregistrer: {image_urls}")
@@ -389,6 +398,15 @@ def update_owner_property(property_id):
                 display_order=i
             )
             db.session.add(new_image)
+            
+    # --- NEW EAV MIGRATION LOGIC ---
+    # Sauvegarde robuste des caractéristiques dans la table relationnelle EAV
+    try:
+        save_property_eav_values(property.id, attributes_data)
+    except Exception as e:
+        current_app.logger.error(f"EAV Saving failed: {e}")
+        raise e
+    # -------------------------------
 
     try:
         db.session.commit()
