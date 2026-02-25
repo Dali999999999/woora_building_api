@@ -320,7 +320,7 @@ def update_owner_property(property_id):
                 else:
                     return jsonify({'message': 'Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide défini par un entier.'}), 400
             else:
-                return jsonify({'message': 'Statut de propriété invalide. L\\'usage d\\'identifiants (IDs) est désormais strictement requis pour le statut.'}), 400            
+                return jsonify({'message': "Statut de propriété invalide. L'usage d'identifiants (IDs) est désormais strictement requis pour le statut."}), 400            
         if 'description' in attributes_data:
             property.description = attributes_data.get('description')
             
