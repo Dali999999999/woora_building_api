@@ -990,7 +990,7 @@ def create_property_for_agent():
         current_app.logger.warning(f"Validation échouée: Type de propriété invalide ou non trouvé. ID: {property_type_id}")
         return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
 
-    status_input = dynamic_attributes.get('status')
+    status_input = dynamic_attributes.get('status') or data.get('status')
     current_app.logger.debug(f"status brut (ID ou Slug attendu): {status_input}, type: {type(status_input)}")
     
     status_obj = None
@@ -1005,33 +1005,8 @@ def create_property_for_agent():
 
     # Si ce n'est pas un ID valide ou qu'on n'a rien trouvé, c'est une erreur de validation
     if not status_obj:
-        # Fallback pour compatibilité descendante
-        if isinstance(status_input, str) and not status_input.isdigit():
-            name_to_slug = {
-                'à vendre': 'for_sale',
-                'a vendre': 'for_sale',
-                'à louer': 'for_rent',
-                'a louer': 'for_rent',
-                'vefa': 'vefa',
-                'bailler': 'bailler',
-                'location-vente': 'location_vente',
-                'vendu': 'sold',
-                'loué': 'rented'
-            }
-            allowed_statuses = list(set(name_to_slug.values()))
-            clean_status = status_input.strip().lower()
-
-            if clean_status in allowed_statuses:
-                slug_to_name = {v: k for k, v in name_to_slug.items()}
-                target_name = slug_to_name.get(clean_status)
-                if target_name:
-                    status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(target_name)).first()
-            elif clean_status in name_to_slug:
-                status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(status_input.strip())).first()
-
-    if not status_obj:
         current_app.logger.warning(f"Validation échouée: ID de statut ou code statut invalide ou non trouvé. Reçu: {status_input}")
-        return jsonify({'message': "Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide."}), 400
+        return jsonify({'message': "Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide défini par un entier."}), 400
 
     # Fallback pour le champ legacy 'status' de type ENUM
     name_to_slug_legacy = {
@@ -1199,32 +1174,17 @@ def update_agent_created_property(property_id):
         
         if 'status' in attributes_data:
             raw_status = attributes_data['status']
-            status_obj = None
-            
-            # Priorité 1: C'est un ID entier
             if isinstance(raw_status, int) or (isinstance(raw_status, str) and raw_status.isdigit()):
                 status_obj = PropertyStatus.query.get(int(raw_status))
-            
-            # Priorité 2: Fallback slug ou nom (rétro-compatibilité)
-            if not status_obj and isinstance(raw_status, str):
-                slug_to_name = {
-                    'for_sale': 'À Vendre', 'for_rent': 'À Louer', 'vefa': 'VEFA',
-                    'bailler': 'Bailler', 'location_vente': 'Location-vente',
-                    'sold': 'Vendu', 'rented': 'Loué'
-                }
-                target_name = slug_to_name.get(raw_status, raw_status)
-                status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(target_name)).first()
-            
-            if status_obj:
-                property.status_id = status_obj.id
-                # Mise à jour du champ legacy ENUM
-                name_to_slug = {
-                    'à vendre': 'for_sale', 'a vendre': 'for_sale',
-                    'à louer': 'for_rent', 'a louer': 'for_rent',
-                    'vefa': 'vefa', 'bailler': 'bailler',
-                    'location-vente': 'location_vente', 'vendu': 'sold', 'loué': 'rented'
-                }
-                property.status = name_to_slug.get(status_obj.name.strip().lower(), 'for_sale')
+                if status_obj:
+                    property.status_id = status_obj.id
+                    # Fallback pour la colonne legacy `status`
+                    name_to_slug = {'à vendre': 'for_sale', 'a vendre': 'for_sale', 'à louer': 'for_rent', 'a louer': 'for_rent', 'vefa': 'vefa', 'bailler': 'bailler', 'location-vente': 'location_vente', 'vendu': 'sold', 'loué': 'rented'}
+                    property.status = name_to_slug.get(status_obj.name.strip().lower(), 'for_sale')
+                else:
+                    return jsonify({'message': 'Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide défini par un entier.'}), 400
+            else:
+                 return jsonify({'message': 'Statut de propriété invalide. L\\'usage d\\'identifiants (IDs) est désormais strictement requis pour le statut.'}), 400
             
         if 'description' in attributes_data:
             property.description = attributes_data.get('description')
