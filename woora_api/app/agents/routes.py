@@ -94,23 +94,28 @@ def get_all_properties_for_agent():
                 from sqlalchemy import and_, or_, func, cast, String
                 
                 for key, value in dynamic_filters.items():
-                    val_str = str(value).lower()
-                    if val_str in ['true', '1', 'oui', 'yes']:
-                        bool_cond = PropertyValue.value_boolean == True
-                    elif val_str in ['false', '0', 'non', 'no']:
-                        bool_cond = PropertyValue.value_boolean == False
-                    else:
-                        bool_cond = False # Ne pas matcher un boolean si ce n'est pas textuel
-                        
-                    cond = and_(
-                        func.lower(PropertyAttribute.name) == key.lower().strip(),
-                        or_(
-                            func.lower(PropertyValue.value_string) == val_str,
-                            cast(PropertyValue.value_integer, String) == str(value),
-                            cast(PropertyValue.value_decimal, String) == str(value),
-                            bool_cond
+                    # Match exact basé sur le type reçu du JSON
+                    if isinstance(value, bool):
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            PropertyValue.value_boolean == value
                         )
-                    )
+                    elif isinstance(value, int):
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            PropertyValue.value_integer == value
+                        )
+                    elif isinstance(value, float):
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            PropertyValue.value_decimal == str(value)
+                        )
+                    else:
+                        val_str = str(value).lower().strip()
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            func.lower(PropertyValue.value_string) == val_str
+                        )
                     
                     # On exige que CET attribut avec CETTE valeur existe pour ce bien
                     has_attr = db.session.query(PropertyValue.id).join(
@@ -985,67 +990,62 @@ def create_property_for_agent():
         current_app.logger.warning(f"Validation échouée: Type de propriété invalide ou non trouvé. ID: {property_type_id}")
         return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
 
-    status = dynamic_attributes.get('status')
-    current_app.logger.debug(f"status brut: {status}, type: {type(status)}")
+    status_input = dynamic_attributes.get('status')
+    current_app.logger.debug(f"status brut (ID ou Slug attendu): {status_input}, type: {type(status_input)}")
     
-    # --- GESTION ROBUSTE DU STATUT (ID ou Code/Slug) ---
     status_obj = None
-    final_status_slug = 'for_sale' # Valeur par défaut
     
-    # Mapping inversé pour retrouver le slug à partir du nom (au cas où on reçoit le nom)
-    name_to_slug = {
-        'À Vendre': 'for_sale',
-        'À Louer': 'for_rent',
-        'VEFA': 'vefa',
-        'Bailler': 'bailler',
-        'Location-vente': 'location_vente',
-        'Vendu': 'sold',
-        'Loué': 'rented'
-    }
-
-    if status:
-        # Cas 1: C'est un ID (entier ou chaîne numérique)
-        if isinstance(status, int) or (isinstance(status, str) and status.isdigit()):
-            status_id = int(status)
+    # Tentative de récupération stricte par ID prioritairement
+    try:
+        if isinstance(status_input, int) or (isinstance(status_input, str) and status_input.isdigit()):
+            status_id = int(status_input)
             status_obj = PropertyStatus.query.get(status_id)
-            if status_obj:
-                # On essaie de retrouver le slug correspondant au nom
-                final_status_slug = name_to_slug.get(status_obj.name, 'for_sale')
-            else:
-                current_app.logger.warning(f"Status ID {status_id} non trouvé. Utilisation par défaut.")
-        
-        # Cas 2: C'est une chaîne (Slug ou Nom)
-        elif isinstance(status, str):
-            # Est-ce un slug connu ?
-            allowed_statuses = ['for_sale', 'for_rent', 'sold', 'rented', 'vefa', 'bailler', 'location_vente']
-            if status in allowed_statuses:
-                final_status_slug = status
-                # On cherche l'objet par nom via le mapping slug -> nom
-                slug_to_name = {v: k for k, v in name_to_slug.items()}
-                target_name = slug_to_name.get(status)
-                if target_name:
-                    status_obj = PropertyStatus.query.filter_by(name=target_name).first()
-            else:
-                # C'est peut-être le Nom direct ?
-                if status in name_to_slug:
-                    final_status_slug = name_to_slug[status]
-                    status_obj = PropertyStatus.query.filter_by(name=status).first()
-                else:
-                    current_app.logger.warning(f"Statut chaîne inconnu: {status}. Utilisation par défaut.")
-    
-    # Si on n'a toujours pas d'objet statut (cas slug sans objet en base ou défaut), on cherche le défaut
-    if not status_obj:
-        slug_to_name = {v: k for k, v in name_to_slug.items()}
-        target_name = slug_to_name.get(final_status_slug, 'À Vendre')
-        status_obj = PropertyStatus.query.filter_by(name=target_name).first()
-        
-        if not status_obj:
-             # Safety net critique : créer le statut s'il manque en base
-             status_obj = PropertyStatus(name=target_name, color='#27AE60')
-             db.session.add(status_obj)
-             db.session.flush()
+    except (ValueError, TypeError):
+        pass
 
-    status = final_status_slug # On normalise 'status' pour qu'il soit toujours le slug
+    # Si ce n'est pas un ID valide ou qu'on n'a rien trouvé, c'est une erreur de validation
+    if not status_obj:
+        # Fallback pour compatibilité descendante
+        if isinstance(status_input, str) and not status_input.isdigit():
+            name_to_slug = {
+                'à vendre': 'for_sale',
+                'a vendre': 'for_sale',
+                'à louer': 'for_rent',
+                'a louer': 'for_rent',
+                'vefa': 'vefa',
+                'bailler': 'bailler',
+                'location-vente': 'location_vente',
+                'vendu': 'sold',
+                'loué': 'rented'
+            }
+            allowed_statuses = list(set(name_to_slug.values()))
+            clean_status = status_input.strip().lower()
+
+            if clean_status in allowed_statuses:
+                slug_to_name = {v: k for k, v in name_to_slug.items()}
+                target_name = slug_to_name.get(clean_status)
+                if target_name:
+                    status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(target_name)).first()
+            elif clean_status in name_to_slug:
+                status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(status_input.strip())).first()
+
+    if not status_obj:
+        current_app.logger.warning(f"Validation échouée: ID de statut ou code statut invalide ou non trouvé. Reçu: {status_input}")
+        return jsonify({'message': "Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide."}), 400
+
+    # Fallback pour le champ legacy 'status' de type ENUM
+    name_to_slug_legacy = {
+        'à vendre': 'for_sale',
+        'a vendre': 'for_sale',
+        'à louer': 'for_rent',
+        'a louer': 'for_rent',
+        'vefa': 'vefa',
+        'bailler': 'bailler',
+        'location-vente': 'location_vente',
+        'vendu': 'sold',
+        'loué': 'rented'
+    }
+    legacy_status_slug = name_to_slug_legacy.get(status_obj.name.strip().lower(), 'for_sale')
 
     # L'agent crée un bien pour lui-même, donc owner_id = agent_id = current_user_id
     new_property = Property(
@@ -1054,8 +1054,8 @@ def create_property_for_agent():
         property_type_id=property_type_id,
         title=title,
         description=description,
-        status=status,
-        status_id=status_obj.id if status_obj else None, # Lier l'ID du statut
+        status=legacy_status_slug,
+        status_id=status_obj.id, # Lier strictement l'ID du statut
         price=price,
         address=address,
         city=city,
@@ -1198,17 +1198,33 @@ def update_agent_created_property(property_id):
                 return jsonify({'message': "Le prix doit être un nombre valide."}), 400
         
         if 'status' in attributes_data:
-            property.status = attributes_data['status']
-            # Mise à jour du status_id
-            status_mapping = {
-                'for_sale': 'À Vendre', 'for_rent': 'À Louer', 'vefa': 'VEFA', 
-                'bailler': 'Bailler', 'location_vente': 'Location-vente', 
-                'sold': 'Vendu', 'rented': 'Loué'
-            }
-            status_name = status_mapping.get(property.status, property.status)
-            status_obj = PropertyStatus.query.filter_by(name=status_name).first()
+            raw_status = attributes_data['status']
+            status_obj = None
+            
+            # Priorité 1: C'est un ID entier
+            if isinstance(raw_status, int) or (isinstance(raw_status, str) and raw_status.isdigit()):
+                status_obj = PropertyStatus.query.get(int(raw_status))
+            
+            # Priorité 2: Fallback slug ou nom (rétro-compatibilité)
+            if not status_obj and isinstance(raw_status, str):
+                slug_to_name = {
+                    'for_sale': 'À Vendre', 'for_rent': 'À Louer', 'vefa': 'VEFA',
+                    'bailler': 'Bailler', 'location_vente': 'Location-vente',
+                    'sold': 'Vendu', 'rented': 'Loué'
+                }
+                target_name = slug_to_name.get(raw_status, raw_status)
+                status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(target_name)).first()
+            
             if status_obj:
                 property.status_id = status_obj.id
+                # Mise à jour du champ legacy ENUM
+                name_to_slug = {
+                    'à vendre': 'for_sale', 'a vendre': 'for_sale',
+                    'à louer': 'for_rent', 'a louer': 'for_rent',
+                    'vefa': 'vefa', 'bailler': 'bailler',
+                    'location-vente': 'location_vente', 'vendu': 'sold', 'loué': 'rented'
+                }
+                property.status = name_to_slug.get(status_obj.name.strip().lower(), 'for_sale')
             
         if 'description' in attributes_data:
             property.description = attributes_data.get('description')

@@ -123,71 +123,72 @@ def create_property():
         current_app.logger.warning(f"Validation échouée: Type de propriété invalide ou non trouvé. ID: {property_type_id}")
         return jsonify({'message': "Type de propriété invalide ou non trouvé."}), 400
 
-    status = dynamic_attributes.get('status')
-    current_app.logger.debug(f"status brut: {status}, type: {type(status)}")
+    status_input = dynamic_attributes.get('status')
+    current_app.logger.debug(f"status brut (ID ou Slug attendu): {status_input}, type: {type(status_input)}")
 
-    # --- GESTION ROBUSTE DU STATUT (ID ou Code/Slug) ---
     status_obj = None
-    final_status_slug = 'for_sale' # Valeur par défaut
     
-    # Mapping inversé pour retrouver le slug à partir du nom
-    name_to_slug = {
-        'À Vendre': 'for_sale',
-        'À Louer': 'for_rent',
-        'VEFA': 'vefa',
-        'Bailler': 'bailler',
-        'Location-vente': 'location_vente',
-        'Vendu': 'sold',
-        'Loué': 'rented'
-    }
-
-    if status:
-        # Cas 1: C'est un ID (entier ou chaîne numérique)
-        if isinstance(status, int) or (isinstance(status, str) and status.isdigit()):
-            status_id = int(status)
+    # Tentative de récupération stricte par ID prioritairement
+    try:
+        if isinstance(status_input, int) or (isinstance(status_input, str) and status_input.isdigit()):
+            status_id = int(status_input)
             status_obj = PropertyStatus.query.get(status_id)
-            if status_obj:
-                # On essaie de retrouver le slug correspondant au nom
-                final_status_slug = name_to_slug.get(status_obj.name, 'for_sale')
-            else:
-                current_app.logger.warning(f"Status ID {status_id} non trouvé. Utilisation par défaut.")
-        
-        # Cas 2: C'est une chaîne (Slug ou Nom)
-        elif isinstance(status, str):
-            allowed_statuses = ['for_sale', 'for_rent', 'sold', 'rented', 'vefa', 'bailler', 'location_vente']
-            if status in allowed_statuses:
-                final_status_slug = status
-                slug_to_name = {v: k for k, v in name_to_slug.items()}
-                target_name = slug_to_name.get(status)
-                if target_name:
-                    status_obj = PropertyStatus.query.filter_by(name=target_name).first()
-            else:
-                if status in name_to_slug:
-                    final_status_slug = name_to_slug[status]
-                    status_obj = PropertyStatus.query.filter_by(name=status).first()
-                else:
-                    current_app.logger.warning(f"Statut chaîne inconnu: {status}. Utilisation par défaut.")
-    
-    # Si on n'a toujours pas d'objet statut
-    if not status_obj:
-        slug_to_name = {v: k for k, v in name_to_slug.items()}
-        target_name = slug_to_name.get(final_status_slug, 'À Vendre')
-        status_obj = PropertyStatus.query.filter_by(name=target_name).first()
-        
-        if not status_obj:
-             status_obj = PropertyStatus(name=target_name, color='#27AE60')
-             db.session.add(status_obj)
-             db.session.flush()
+    except (ValueError, TypeError):
+        pass
 
-    status = final_status_slug # Normalisation
+    # Si ce n'est pas un ID valide ou qu'on n'a rien trouvé, c'est une erreur de validation
+    if not status_obj:
+        # Fallback pour compatibilité descendante (au cas où l'app envoie encore 'for_sale' exceptionnellement)
+        if isinstance(status_input, str) and not status_input.isdigit():
+            # Si c'est un slug (ex: 'for_sale', 'for_rent')
+            name_to_slug = {
+                'à vendre': 'for_sale',
+                'a vendre': 'for_sale',
+                'à louer': 'for_rent',
+                'a louer': 'for_rent',
+                'vefa': 'vefa',
+                'bailler': 'bailler',
+                'location-vente': 'location_vente',
+                'vendu': 'sold',
+                'loué': 'rented'
+            }
+            allowed_statuses = list(set(name_to_slug.values()))
+            clean_status = status_input.strip().lower()
+
+            if clean_status in allowed_statuses:
+                slug_to_name = {v: k for k, v in name_to_slug.items()}
+                target_name = slug_to_name.get(clean_status)
+                if target_name:
+                    status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(target_name)).first()
+            elif clean_status in name_to_slug:
+                status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(status_input.strip())).first()
+
+    if not status_obj:
+        current_app.logger.warning(f"Validation échouée: ID de statut ou code statut invalide ou non trouvé. Reçu: {status_input}")
+        return jsonify({'message': "Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide."}), 400
+
+    # Fallback pour le champ legacy 'status' de type ENUM (pour éviter de casser l'architecture existante)
+    # On déduit le slug du nom ('À Vendre' -> 'for_sale')
+    name_to_slug_legacy = {
+        'à vendre': 'for_sale',
+        'a vendre': 'for_sale',
+        'à louer': 'for_rent',
+        'a louer': 'for_rent',
+        'vefa': 'vefa',
+        'bailler': 'bailler',
+        'location-vente': 'location_vente',
+        'vendu': 'sold',
+        'loué': 'rented'
+    }
+    legacy_status_slug = name_to_slug_legacy.get(status_obj.name.strip().lower(), 'for_sale')
 
     new_property = Property(
         owner_id=current_user_id,
         property_type_id=property_type_id,
         title=title,
         description=description,
-        status=status,
-        status_id=status_obj.id if status_obj else None, # Lier l'ID du statut
+        status=legacy_status_slug,
+        status_id=status_obj.id, # Lier strictement l'ID du statut
         price=price,
         address=address,
         city=city,

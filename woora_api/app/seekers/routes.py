@@ -96,23 +96,29 @@ def get_all_properties_for_seeker():
                 from sqlalchemy import and_, or_, func, cast, String
                 
                 for key, value in dynamic_filters.items():
-                    val_str = str(value).lower()
-                    if val_str in ['true', '1', 'oui', 'yes']:
-                        bool_cond = PropertyValue.value_boolean == True
-                    elif val_str in ['false', '0', 'non', 'no']:
-                        bool_cond = PropertyValue.value_boolean == False
-                    else:
-                        bool_cond = False # Ne pas matcher un boolean si ce n'est pas textuel
-                        
-                    cond = and_(
-                        func.lower(PropertyAttribute.name) == key.lower().strip(),
-                        or_(
-                            func.lower(PropertyValue.value_string) == val_str,
-                            cast(PropertyValue.value_integer, String) == str(value),
-                            cast(PropertyValue.value_decimal, String) == str(value),
-                            bool_cond
+                    # Match exact basé sur le type reçu du JSON
+                    if isinstance(value, bool):
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            PropertyValue.value_boolean == value
                         )
-                    )
+                    elif isinstance(value, int):
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            PropertyValue.value_integer == value
+                        )
+                    elif isinstance(value, float):
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            PropertyValue.value_decimal == str(value) # value_decimal is string/numeric in DB
+                        )
+                    else:
+                        # String et fallback
+                        val_str = str(value).lower().strip()
+                        cond = and_(
+                            func.lower(PropertyAttribute.name) == key.lower().strip(),
+                            func.lower(PropertyValue.value_string) == val_str
+                        )
                     
                     # On exige que CET attribut avec CETTE valeur existe pour ce bien
                     has_attr = db.session.query(PropertyValue.id).join(
