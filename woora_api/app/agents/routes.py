@@ -91,7 +91,7 @@ def get_all_properties_for_agent():
             dynamic_filters = json.loads(filters_json)
             if isinstance(dynamic_filters, dict) and dynamic_filters:
                 from app.models import PropertyValue, PropertyAttribute
-                from sqlalchemy import and_, or_, func, cast, String
+                from sqlalchemy import and_
                 
                 for key, value in dynamic_filters.items():
                     # Match exact basé sur le type reçu du JSON
