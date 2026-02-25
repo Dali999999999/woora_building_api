@@ -104,13 +104,20 @@ class PropertyType(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.Text)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    display_order = db.Column(db.Integer, nullable=False, default=0)
     
     properties = db.relationship('Property', back_populates='property_type')
     attribute_scopes = db.relationship('PropertyAttributeScope', back_populates='property_type', cascade="all, delete-orphan")
     property_requests = db.relationship('PropertyRequest', back_populates='property_type')
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'description': self.description, 'is_active': self.is_active}
+        return {
+            'id': self.id, 
+            'name': self.name, 
+            'description': self.description, 
+            'is_active': self.is_active,
+            'display_order': self.display_order
+        }
 
 class PropertyAttribute(db.Model):
     __tablename__ = 'PropertyAttributes'

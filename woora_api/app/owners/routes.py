@@ -604,7 +604,7 @@ def get_property_types_for_owner():
         selectinload(PropertyType.attribute_scopes)  # Pré-charger les tables de liaison
             .selectinload(PropertyAttributeScope.attribute)  # Depuis la liaison, pré-charger l'attribut
                 .selectinload(PropertyAttribute.options)      # Depuis l'attribut, pré-charger ses options
-    ).filter(PropertyType.is_active == True).all()
+    ).filter(PropertyType.is_active == True).order_by(PropertyType.display_order.asc()).all()
 
     # Étape 2: On construit la réponse JSON. Toutes les données sont déjà en mémoire,
     # donc ces boucles sont extrêmement rapides et ne contactent plus la base de données.

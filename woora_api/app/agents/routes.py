@@ -301,7 +301,7 @@ def get_property_types_for_agent():
             selectinload(PropertyType.attribute_scopes)
                 .selectinload(PropertyAttributeScope.attribute)
                     .selectinload(PropertyAttribute.options)
-        ).filter(PropertyType.is_active == True).all()
+        ).filter(PropertyType.is_active == True).order_by(PropertyType.display_order.asc()).all()
 
         result = []
         for pt in property_types:
@@ -323,7 +323,7 @@ def get_property_types_for_agent():
         current_app.logger.error(f"Erreur property types optimisée: {e}")
         # Fallback simple en cas d'erreur
         try:
-            pts = PropertyType.query.filter_by(is_active=True).all()
+            pts = PropertyType.query.filter_by(is_active=True).order_by(PropertyType.display_order.asc()).all()
             simple_result = [{'id': pt.id, 'name': pt.name, 'attributes': []} for pt in pts]
             return jsonify(simple_result)
         except:

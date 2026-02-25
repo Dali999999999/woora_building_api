@@ -481,7 +481,7 @@ def delete_property_admin(property_id):
 # ------------- TYPES DE PROPRIÉTÉ -------------
 @admin_bp.route('/property_types', methods=['GET'])
 def get_property_types():
-    property_types = PropertyType.query.all()
+    property_types = PropertyType.query.order_by(PropertyType.display_order.asc()).all()
     return jsonify([pt.to_dict() for pt in property_types])
 
 @admin_bp.route('/property_types', methods=['POST'])
@@ -519,6 +519,18 @@ def delete_property_type(type_id):
     db.session.delete(pt)
     db.session.commit()
     return jsonify({'message': 'Type supprimé.'}), 204
+
+@admin_bp.route('/property_types/reorder', methods=['PUT'])
+@jwt_required()
+def reorder_property_types():
+    data = request.get_json()
+    order_data = data.get('order_data', [])
+    for item in order_data:
+        pt = PropertyType.query.get(item['id'])
+        if pt:
+            pt.display_order = item['display_order']
+    db.session.commit()
+    return jsonify({'message': 'Ordre des types de propriété mis à jour avec succès.'})
 
 # ------------- ATTRIBUTS -------------
 @admin_bp.route('/property_attributes', methods=['GET'])
@@ -583,7 +595,7 @@ def get_property_types_with_attributes():
         selectinload(PropertyType.attribute_scopes)
             .selectinload(PropertyAttributeScope.attribute)
                 .selectinload(PropertyAttribute.options)
-    ).all() # On ne filtre pas par is_active pour l'admin
+    ).order_by(PropertyType.display_order.asc()).all() # On ne filtre pas par is_active pour l'admin
 
     # Étape 2: Construire la réponse JSON à partir des données déjà en mémoire.
     # Ces boucles sont maintenant ultra-rapides.
