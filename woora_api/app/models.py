@@ -191,10 +191,10 @@ import random
 import string
 
 def generate_share_uid():
-    \"\"\"
+    """
     Génère un identifiant Base36 unique basé sur l'horodatage en microsecondes 
     et quelques caractères aléatoires pour éviter les collisions exactes, SANS inclure l'ID en base.
-    \"\"\"
+    """
     timestamp_micro = int(time.time() * 1000000)
     
     chars = string.digits + string.ascii_lowercase
