@@ -4,7 +4,8 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.models import (
     User, Property, PropertyType, PropertyAttribute, AttributeOption,
     PropertyAttributeScope, db, AppSetting, ServiceFee, VisitRequest,
-    Referral, Commission, Transaction, PropertyRequest, PropertyStatus
+    Referral, Commission, Transaction, PropertyRequest, PropertyStatus,
+    PropertyImage
 )
 from app.schemas import VisitSettingsSchema
 from marshmallow import ValidationError
@@ -14,6 +15,7 @@ import os
 import uuid
 from decimal import Decimal
 from app.utils.email_utils import send_admin_rejection_notification, send_admin_confirmation_to_owner, send_admin_response_to_seeker
+from app.utils.eav_utils import save_property_eav_values  # Fix: import manquant causant NameError sur PUT /admin/properties/<id>
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from sqlalchemy import inspect
