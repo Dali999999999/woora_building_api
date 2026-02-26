@@ -186,6 +186,26 @@ class PropertyStatus(db.Model):
             'description': self.description
         }
 
+import time
+import random
+import string
+
+def generate_share_uid():
+    \"\"\"
+    Génère un identifiant Base36 unique basé sur l'horodatage en microsecondes 
+    et quelques caractères aléatoires pour éviter les collisions exactes, SANS inclure l'ID en base.
+    \"\"\"
+    timestamp_micro = int(time.time() * 1000000)
+    
+    chars = string.digits + string.ascii_lowercase
+    base36 = ''
+    while timestamp_micro > 0:
+        timestamp_micro, i = divmod(timestamp_micro, 36)
+        base36 = chars[i] + base36
+        
+    random_suffix = ''.join(random.choices(chars, k=3))
+    return base36 + random_suffix
+
 class Property(db.Model):
     __tablename__ = 'Properties'
     id = db.Column(db.Integer, primary_key=True)
@@ -199,6 +219,7 @@ class Property(db.Model):
     property_type_id = db.Column(db.Integer, db.ForeignKey('PropertyTypes.id', ondelete='RESTRICT'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
+    share_uid = db.Column(db.String(20), unique=True, nullable=True, default=generate_share_uid)
     
     # --- MODIFICATION STATUT DYNAMIQUE ---
     # Ancien champ (optionnel de le garder ou le supprimer, ici on le garde en compatibilité mais non utilisé)
@@ -255,6 +276,8 @@ class Property(db.Model):
             'buyer_id': self.buyer_id, # Inclure l'ID de l'acheteur
             'property_type_id': self.property_type_id,
             'title': self.title, 'description': self.description, 
+            'share_uid': self.share_uid,
+            'share_link': f"https://goods.wooraentreprises.com/p/{self.share_uid}" if self.share_uid else None,
             'status': status_data, # Renvoie maintenant un OBJET complet {id, name, color}
             'price': float(self.price) if self.price is not None else None,
             'address': self.address, 'city': self.city, 'postal_code': self.postal_code,
