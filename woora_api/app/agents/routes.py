@@ -1045,6 +1045,14 @@ def create_property_for_agent():
         db.session.flush()
         current_app.logger.debug(f"ID de la nouvelle propriété après flush: {new_property.id}")
 
+        # --- SAUVEGARDE EAV (obligatoire) ---
+        try:
+            save_property_eav_values(new_property.id, dynamic_attributes)
+        except Exception as e:
+            current_app.logger.error(f"EAV Saving failed: {e}")
+            raise e
+        # ------------------------------------
+
         image_urls = data.get('image_urls', [])
         current_app.logger.debug(f"URLs d'images à enregistrer: {image_urls}")
         if image_urls:
@@ -1216,15 +1224,7 @@ def update_agent_created_property(property_id):
             except (ValueError, TypeError):
                 return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
 
-        # Mise à jour du champ JSON attributes pour rétro-compatibilité temporaire
-        if property.attributes is None:
-            property.attributes = {}
-        
-        property.attributes.update(attributes_data)
-        flag_modified(property, "attributes")
-
-        # --- NEW EAV MIGRATION LOGIC ---
-        # Sauvegarde robuste des caractéristiques dans la nouvelle table PropertyValues
+        # --- EAV: Sauvegarde dans la nouvelle table relationnelle ---
         try:
             save_property_eav_values(property.id, attributes_data)
         except Exception as e:
