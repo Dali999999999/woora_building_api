@@ -176,6 +176,7 @@ class PropertyStatus(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     color = db.Column(db.String(20), default='#000000')
     description = db.Column(db.Text)
+    display_order = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -183,7 +184,8 @@ class PropertyStatus(db.Model):
             'id': self.id,
             'name': self.name,
             'color': self.color,
-            'description': self.description
+            'description': self.description,
+            'display_order': self.display_order
         }
 
 import time

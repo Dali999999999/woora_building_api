@@ -46,7 +46,7 @@ def get_property_statuses():
         if not user or user.role != 'admin':
             return jsonify({'message': 'Accès non autorisé.'}), 403
         
-        statuses = PropertyStatus.query.all()
+        statuses = PropertyStatus.query.order_by(PropertyStatus.display_order.asc()).all()
         return jsonify([s.to_dict() for s in statuses]), 200
     except Exception as e:
         current_app.logger.error(f"Erreur lors de la récupération des statuts: {e}", exc_info=True)
@@ -68,10 +68,14 @@ def create_property_status():
         if PropertyStatus.query.filter_by(name=data['name']).first():
              return jsonify({'message': 'Ce statut existe déjà.'}), 409
 
+        # Calcul automatique du display_order (max actuel + 1)
+        max_order = db.session.query(db.func.max(PropertyStatus.display_order)).scalar() or 0
+
         new_status = PropertyStatus(
             name=data['name'],
             color=data.get('color', '#000000'),
-            description=data.get('description', '')
+            description=data.get('description', ''),
+            display_order=max_order + 1
         )
         db.session.add(new_status)
         db.session.commit()
@@ -101,6 +105,7 @@ def update_property_status(status_id):
             
         if 'color' in data: status_obj.color = data['color']
         if 'description' in data: status_obj.description = data['description']
+        if 'display_order' in data: status_obj.display_order = data['display_order']
         
         db.session.commit()
         return jsonify(status_obj.to_dict()), 200
@@ -129,6 +134,43 @@ def delete_property_status(status_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur suppression statut: {e}", exc_info=True)
+        return jsonify({'message': 'Erreur interne.'}), 500
+
+# ===================================================================
+# REORDER
+# ===================================================================
+
+@admin_bp.route('/property-statuses/reorder', methods=['PUT'])
+@jwt_required()
+def reorder_property_statuses():
+    """
+    Réorganise l'ordre d'affichage (display_order) des statuts immobiliers.
+    Attend un tableau d'objets: [{'id': 1, 'display_order': 0}, {'id': 2, 'display_order': 1}, ...]
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    if not user or user.role != 'admin': return jsonify({'message': 'Accès non autorisé.'}), 403
+
+    data = request.get_json()
+    order_data = data.get('order_data')
+    
+    if not order_data or not isinstance(order_data, list):
+        return jsonify({'message': 'Un tableau "order_data" est requis.'}), 400
+
+    try:
+        for item in order_data:
+            status_id = item.get('id')
+            new_order = item.get('display_order')
+            if status_id is not None and new_order is not None:
+                status_obj = PropertyStatus.query.get(status_id)
+                if status_obj:
+                    status_obj.display_order = new_order
+                    
+        db.session.commit()
+        return jsonify({'message': 'Ordre mis à jour avec succès.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur réorganisation statuts: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne.'}), 500
 
 # ===================================================================
