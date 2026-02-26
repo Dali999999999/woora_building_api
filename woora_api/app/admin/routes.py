@@ -1306,12 +1306,15 @@ def delete_property_attribute(attribute_id):
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
 
 
-@admin_bp.route('/properties/<int:property_id>', methods=['PUT', 'PATCH'])
+@admin_bp.route('/properties/<int:property_id>', methods=['PUT', 'PATCH', 'OPTIONS'])
 # @jwt_required() et @admin_required via before_request ou decorator global
 def update_property_by_admin(property_id):
     """
     Permet à un administrateur de modifier n'importe quel bien immobilier.
     """
+    if request.method == 'OPTIONS':
+        return '', 204
+
     # Note: La vérification admin est supposée être gérée par le décorateur ou le blueprint
 
     # Vérifier que le bien existe

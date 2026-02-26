@@ -251,13 +251,16 @@ def get_owner_property_details(property_id): # NOUVEAU NOM (ou gardez celui-ci s
     property_dict['image_urls'] = [img.image_url for img in property.images] 
     return jsonify(property_dict), 200
 
-@owners_bp.route('/properties/<int:property_id>', methods=['PUT'])
+@owners_bp.route('/properties/<int:property_id>', methods=['PUT', 'OPTIONS'])
 @jwt_required()
 def update_owner_property(property_id):
     """
     Met à jour un bien immobilier existant.
     Gère à la fois les champs statiques (colonnes de la table) et les attributs dynamiques (champ JSON).
     """
+    if request.method == 'OPTIONS':
+        return '', 204
+
     current_user_id = get_jwt_identity()
     user = User.query.get(current_user_id)
     

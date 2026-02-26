@@ -1138,12 +1138,15 @@ def upload_image_for_agent():
         current_app.logger.error(f"Upload error: {e}")
         return jsonify({'error': 'Erreur interne'}), 500
 
-@agents_bp.route('/properties/<int:property_id>', methods=['PUT'])
+@agents_bp.route('/properties/<int:property_id>', methods=['PUT', 'OPTIONS'])
 @jwt_required()
 def update_agent_created_property(property_id):
     """
     Permet à un agent de modifier un bien immobilier qu'il a créé.
     """
+    if request.method == 'OPTIONS':
+        return '', 204
+
     current_user_id = get_jwt_identity()
     agent = User.query.get(current_user_id)
     if not agent or agent.role != 'agent':
