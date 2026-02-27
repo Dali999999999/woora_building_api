@@ -1,6 +1,6 @@
 # app/main/routes.py
 
-from flask import Blueprint, render_template, send_from_directory, current_app, jsonify
+from flask import Blueprint, render_template, send_from_directory, current_app, jsonify, request
 from app.models import Property
 from flask_jwt_extended import jwt_required
 from datetime import datetime
