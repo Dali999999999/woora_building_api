@@ -1,7 +1,7 @@
 # app/seekers/routes.py
 
 from flask import Blueprint, request, jsonify, current_app
-from app.models import Property, User, VisitRequest, Referral, PropertyRequest, UserFavorite, AgentReview
+from app.models import Property, User, VisitRequest, Referral, PropertyRequest, UserFavorite, AgentReview, PropertyStatus
 from app import db # Assurez-vous que l'import de 'db' est correct
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
@@ -38,10 +38,11 @@ def get_all_properties_for_seeker():
         selectinload(Property.images),
         selectinload(Property.property_type),
         selectinload(Property.owner)
-    ).join(Property.owner).filter(
+    ).join(Property.owner).outerjoin(PropertyStatus).filter(
         Property.is_validated == True,
         Property.deleted_at == None,
-        User.deleted_at == None
+        User.deleted_at == None,
+        (PropertyStatus.is_deterministic == False) | (PropertyStatus.id == None)
     )
 
     # --- 1.1 Filtre par Statut (Dynamique) ---

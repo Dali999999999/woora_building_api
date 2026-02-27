@@ -16,7 +16,7 @@ def get_property_statuses():
     Endpoint public accessible par les apps mobiles.
     """
     try:
-        statuses = PropertyStatus.query.all()
+        statuses = PropertyStatus.query.order_by(PropertyStatus.display_order.asc()).all()
         return jsonify([s.to_dict() for s in statuses]), 200
     except Exception as e:
         current_app.logger.error(f"Erreur lors de la récupération des statuts: {e}", exc_info=True)

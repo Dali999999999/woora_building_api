@@ -177,6 +177,7 @@ class PropertyStatus(db.Model):
     color = db.Column(db.String(20), default='#000000')
     description = db.Column(db.Text)
     display_order = db.Column(db.Integer, nullable=False, default=0)
+    is_deterministic = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -185,7 +186,8 @@ class PropertyStatus(db.Model):
             'name': self.name,
             'color': self.color,
             'description': self.description,
-            'display_order': self.display_order
+            'display_order': self.display_order,
+            'is_deterministic': self.is_deterministic
         }
 
 import time

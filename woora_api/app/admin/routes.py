@@ -75,7 +75,8 @@ def create_property_status():
             name=data['name'],
             color=data.get('color', '#000000'),
             description=data.get('description', ''),
-            display_order=max_order + 1
+            display_order=max_order + 1,
+            is_deterministic=data.get('is_deterministic', False)
         )
         db.session.add(new_status)
         db.session.commit()
@@ -106,6 +107,7 @@ def update_property_status(status_id):
         if 'color' in data: status_obj.color = data['color']
         if 'description' in data: status_obj.description = data['description']
         if 'display_order' in data: status_obj.display_order = data['display_order']
+        if 'is_deterministic' in data: status_obj.is_deterministic = data['is_deterministic']
         
         db.session.commit()
         return jsonify(status_obj.to_dict()), 200

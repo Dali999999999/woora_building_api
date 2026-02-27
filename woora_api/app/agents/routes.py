@@ -42,10 +42,11 @@ def get_all_properties_for_agent():
         selectinload(Property.images),
         selectinload(Property.property_type),
         selectinload(Property.owner)
-    ).join(Property.owner).filter(
+    ).join(Property.owner).outerjoin(PropertyStatus).filter(
         Property.is_validated == True,
         Property.deleted_at == None,
-        User.deleted_at == None
+        User.deleted_at == None,
+        (PropertyStatus.is_deterministic == False) | (PropertyStatus.id == None)
     )
 
     # --- 1. Filtre par Statut (Dynamique) ---
