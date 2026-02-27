@@ -417,6 +417,7 @@ class VisitRequest(db.Model):
     requested_datetime = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.Enum('pending', 'confirmed', 'accepted', 'rejected', 'completed'), nullable=False, default='pending')
     message = db.Column(db.Text)
+    customer_has_unread_update = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     customer = db.relationship('User', back_populates='visit_requests')
@@ -540,6 +541,7 @@ class Commission(db.Model):
     property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.Enum('pending', 'paid'), nullable=False, default='pending')
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     agent = db.relationship('User', back_populates='commissions_earned')
