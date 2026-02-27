@@ -270,6 +270,7 @@ def update_user_profile():
     if 'city' in data: user.city = data['city']
     if 'country' in data: user.country = data['country']
     if 'bio' in data: user.bio = data['bio']
+    if 'profile_picture_url' in data: user.profile_picture_url = data['profile_picture_url']
     
     try:
         db.session.commit()

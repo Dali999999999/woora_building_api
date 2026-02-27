@@ -44,3 +44,29 @@ def upload_image(file_storage, folder="woora_uploads"):
     except Exception as e:
         current_app.logger.error(f"Cloudinary Upload Error: {str(e)}")
         return None
+
+def generate_cloudinary_signature(params):
+    """
+    Génère une signature pour un upload signé vers Cloudinary.
+    
+    Args:
+        params: Dictionnaire des paramètres à signer (doit inclure 'timestamp').
+    
+    Returns:
+        str: La signature générée.
+    """
+    api_secret = os.getenv('CLOUDINARY_API_SECRET')
+    if not api_secret:
+        # Si CLOUDINARY_URL est utilisé, on peut extraire le secret
+        cloudinary_url = os.getenv('CLOUDINARY_URL')
+        if cloudinary_url:
+            # Format: cloudinary://api_key:api_secret@cloud_name
+            try:
+                api_secret = cloudinary_url.split(':')[2].split('@')[0]
+            except Exception:
+                pass
+                
+    if not api_secret:
+        raise ValueError("Cloudinary API Secret non trouvé dans l'environnement.")
+        
+    return cloudinary.utils.api_sign_request(params, api_secret)
