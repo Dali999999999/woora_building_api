@@ -1,6 +1,9 @@
 import os
 import cloudinary
 import cloudinary.uploader
+from dotenv import load_dotenv
+load_dotenv() # Charger le fichier .env avant tout le reste
+
 from app import create_app, db
 from app.models import PropertyImage, User
 
