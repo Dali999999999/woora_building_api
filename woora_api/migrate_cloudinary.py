@@ -30,8 +30,9 @@ def migrate_images():
         print(f"🖼️  Traitement de {len(property_images)} images de propriétés...")
         
         for img in property_images:
-            if not img.image_url or NEW_CLOUD_NAME in img.image_url:
-                continue # Déjà migré ou vide
+            # On ne migre QUE si c'est sur l'ancien Cloudinary (dbaeu5rsy)
+            if not img.image_url or "dbaeu5rsy" not in img.image_url:
+                continue # Ignore Mega, les autres serveurs ou si c'est déjà migré
             
             try:
                 print(f"  -> Migration image ID {img.id}: {img.image_url}")
@@ -53,7 +54,8 @@ def migrate_images():
         print(f"👤 Traitement de {len(users)} photos de profil...")
         
         for user in users:
-            if not user.profile_picture_url or NEW_CLOUD_NAME in user.profile_picture_url:
+            # On ne migre QUE si c'est sur l'ancien Cloudinary (dbaeu5rsy)
+            if not user.profile_picture_url or "dbaeu5rsy" not in user.profile_picture_url:
                 continue
             
             try:
