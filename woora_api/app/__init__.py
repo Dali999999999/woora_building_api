@@ -1,6 +1,7 @@
 # Fichier app/__init__.py ou équivalent
 
 from flask import Flask, jsonify
+from werkzeug.exceptions import HTTPException
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
 from flask_jwt_extended import JWTManager
@@ -89,7 +90,11 @@ def create_app():
 
     @app.errorhandler(Exception)
     def handle_exception(e):
-        # Capture le traceback complet pour le fichier de log
+        # On laisse passer les erreurs HTTP standard (404, 401, 405...) sans traceback 500
+        if isinstance(e, HTTPException):
+            return e
+
+        # Capture le traceback complet pour le fichier de log uniquement pour les vrais crash (500)
         tb = traceback.format_exc()
         app.logger.error(f"🚨 ERREUR 500 - Exception non gérée:\n{tb}")
         
