@@ -171,6 +171,20 @@ def get_property_details_for_seeker(property_id):
     if not property_obj:
         return jsonify({'message': "Bien immobilier non trouvé."}), 404
     
+    # RÈGLE DE VISIBILITÉ :
+    # Si le bien n'est pas encore validé, seuls l'owner, l'agent créateur ou l'admin peuvent le voir.
+    if not property_obj.is_validated:
+        is_owner = (property_obj.owner_id == user_id)
+        is_agent = (property_obj.agent_id == user_id)
+        
+        # On vérifie le rôle pour l'admin car user_id est juste l'ID, pas l'objet complet ici
+        from app.models import User
+        user = User.query.get(user_id)
+        is_admin = (user and user.role == 'admin')
+        
+        if not (is_owner or is_agent or is_admin):
+            return jsonify({'message': "Ce bien est en cours de validation par l'équipe Woora et n'est pas encore public."}), 403
+    
     # Récupérer les données du bien
     property_dict = property_obj.to_dict()
     

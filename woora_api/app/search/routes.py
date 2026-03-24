@@ -19,7 +19,12 @@ def get_property_by_id(property_id):
     if not property_obj:
         return jsonify({'message': "Aucun bien immobilier ne correspond à cet identifiant."}), 404
 
-    # Vérification 2: Le bien est-il accessible au public ?
+    # Vérification 2: Le bien est-il validé par l'admin ?
+    # RÈGLE : Seul le propriétaire ou l'agent créateur peut voir un bien non validé.
+    if not property_obj.is_validated:
+        return jsonify({'message': "Ce bien est en attente de validation et n'est pas encore public."}), 403
+
+    # Vérification 3: Le bien est-il accessible au public ?
     # On ne veut pas que les gens trouvent des biens déjà vendus ou loués via cette recherche.
     if property_obj.status not in ['for_sale', 'for_rent']:
         return jsonify({'message': "Ce bien n'est plus disponible à la vente ou à la location."}), 404

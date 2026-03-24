@@ -65,11 +65,12 @@ def get_user_favorites():
         return jsonify({'message': "Accès non autorisé."}), 403
 
     # On utilise une jointure pour récupérer directement les objets Property
-    # C'est plus efficace que de récupérer les IDs puis de faire une autre requête
+    # RÈGLE : On ne montre que les biens validés, OU ceux dont l'utilisateur est le propriétaire/agent.
     favorite_properties = Property.query.join(
         UserFavorite, UserFavorite.property_id == Property.id
     ).filter(
-        UserFavorite.user_id == current_user_id
+        UserFavorite.user_id == current_user_id,
+        (Property.is_validated == True) | (Property.owner_id == current_user_id) | (Property.agent_id == current_user_id)
     ).all()
 
     return jsonify([p.to_dict() for p in favorite_properties]), 200

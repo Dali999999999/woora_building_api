@@ -29,6 +29,10 @@ def property_share_preview(property_id):
     """
     prop = Property.query.get_or_404(property_id)
     
+    # RÈGLE : Pas d'aperçu pour les biens non validés (sauf si public)
+    if not prop.is_validated:
+        return "<p>Ce bien est en attente de validation.</p>", 403
+
     # On récupère les infos pour l'aperçu
     title = prop.title
     description = prop.description or "Découvrez ce bien exceptionnel sur Woora Immo."
