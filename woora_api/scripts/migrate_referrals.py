@@ -18,11 +18,12 @@ def migrate():
     with app.app_context():
         print("Checking Referrals table for 'status' column...")
         try:
-            # Check if column exists
-            columns = db.session.execute(text("PRAGMA table_info(Referrals)")).fetchall()
-            column_names = [col[1] for col in columns]
+            # Check if column exists using SQLAlchemy inspector (DB agnostic)
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('Referrals')]
             
-            if 'status' not in column_names:
+            if 'status' not in columns:
                 print("Adding 'status' column to Referrals table...")
                 db.session.execute(text("ALTER TABLE Referrals ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
                 db.session.commit()
@@ -32,9 +33,8 @@ def migrate():
                 
             # Update matching engine to ensure we don't have null preferred_status in requests
             print("Checking PropertyRequests table for 'preferred_status' column...")
-            columns_req = db.session.execute(text("PRAGMA table_info(PropertyRequests)")).fetchall()
-            column_names_req = [col[1] for col in columns_req]
-            if 'preferred_status' not in column_names_req:
+            columns_req = [col['name'] for col in inspector.get_columns('PropertyRequests')]
+            if 'preferred_status' not in columns_req:
                 print("Adding 'preferred_status' column to PropertyRequests table...")
                 db.session.execute(text("ALTER TABLE PropertyRequests ADD COLUMN preferred_status VARCHAR(50)"))
                 db.session.commit()

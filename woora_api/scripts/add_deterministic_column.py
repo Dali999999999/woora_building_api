@@ -22,9 +22,8 @@ def run_migration():
         
         if 'is_deterministic' not in columns:
             print("Ajout de la colonne 'is_deterministic' à PropertyStatuses...")
-            with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE PropertyStatuses ADD COLUMN is_deterministic BOOLEAN NOT NULL DEFAULT FALSE"))
-                conn.commit()
+            db.session.execute(text("ALTER TABLE PropertyStatuses ADD COLUMN is_deterministic BOOLEAN NOT NULL DEFAULT FALSE"))
+            db.session.commit()
             print("✅ Colonne 'is_deterministic' ajoutée avec succès.")
         else:
             print("ℹ️ La colonne 'is_deterministic' existe déjà.")
