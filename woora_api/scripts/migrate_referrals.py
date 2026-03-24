@@ -1,9 +1,13 @@
 import sqlite3
 import os
 import sys
+from dotenv import load_dotenv
 
 # Add the project root to the python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Load environment variables from .env file
+load_dotenv()
 
 from app import db, create_app
 from sqlalchemy import text

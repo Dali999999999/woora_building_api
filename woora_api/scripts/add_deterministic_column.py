@@ -2,8 +2,13 @@ import sys
 import os
 import argparse
 
+from dotenv import load_dotenv
+
 # Ajouter le dossier parent au path pour importer l'app Flask
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Charger les variables d'environnement
+load_dotenv()
 
 from app import create_app, db
 from sqlalchemy import text
