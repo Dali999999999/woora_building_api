@@ -63,7 +63,8 @@ def get_all_properties_for_seeker():
         base_query = base_query.filter(or_(
             Property.title.ilike(search_pattern),
             Property.city.ilike(search_pattern),
-            Property.address.ilike(search_pattern)
+            Property.address.ilike(search_pattern),
+            Property.description.ilike(search_pattern)
         ))
 
     # Type de Bien

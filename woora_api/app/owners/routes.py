@@ -230,7 +230,14 @@ def get_all_owner_properties(): # NOUVEAU NOM : get_ALL_owner_properties
         property_dict['image_urls'] = [image.image_url for image in prop.images]
         properties_with_images.append(property_dict)
 
-    return jsonify(properties_with_images), 200
+    total_count = len(properties)
+    validated_count = sum(1 for p in properties if p.is_validated)
+
+    return jsonify({
+        'properties': properties_with_images,
+        'total_count': total_count,
+        'validated_count': validated_count
+    }), 200
 
 
 

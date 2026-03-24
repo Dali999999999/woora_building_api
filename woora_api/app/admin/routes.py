@@ -410,14 +410,51 @@ def delete_user(user_id):
 # ------------- PROPRIÉTÉS -------------
 @admin_bp.route('/properties', methods=['GET'])
 def get_properties():
-    properties = Property.query.filter(Property.deleted_at == None).options(selectinload(Property.owner)).order_by(Property.created_at.desc()).all()
-    results = []
-    for p in properties:
-        data = p.to_dict()
-        if p.owner:
-            data['owner_details'] = p.owner.to_dict()
-        results.append(data)
-    return jsonify(results)
+    # 1. Capture parameters
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    search_query = request.args.get('search', '').strip()
+    property_type_id = request.args.get('property_type_id')
+    status_id = request.args.get('status_id')
+
+    # 2. Base Query (Exclude soft-deleted)
+    query = Property.query.filter(Property.deleted_at == None).options(selectinload(Property.owner))
+
+    # 3. Apply Search (Keyword in title, description, city, address)
+    if search_query:
+        search_pattern = f"%{search_query}%"
+        query = query.filter(db.or_(
+            Property.title.ilike(search_pattern),
+            Property.description.ilike(search_pattern),
+            Property.city.ilike(search_pattern),
+            Property.address.ilike(search_pattern)
+        ))
+
+    # 4. Apply Filters
+    if property_type_id:
+        try:
+            query = query.filter(Property.property_type_id == int(property_type_id))
+        except (ValueError, TypeError):
+            pass
+    
+    if status_id:
+        try:
+            query = query.filter(Property.status_id == int(status_id))
+        except (ValueError, TypeError):
+            pass
+
+    # 5. Sorting & Pagination
+    query = query.order_by(Property.created_at.desc())
+    pagination = query.paginate(page=page, per_page=limit, error_out=False)
+
+    # 6. Response construction
+    return jsonify({
+        'properties': [p.to_dict() for p in pagination.items],
+        'total': pagination.total,
+        'page': page,
+        'limit': limit,
+        'pages': pagination.pages
+    })
 
 @admin_bp.route('/properties/<int:property_id>/validate', methods=['PUT'])
 def validate_property(property_id):

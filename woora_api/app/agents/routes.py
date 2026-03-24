@@ -1111,8 +1111,15 @@ def get_agent_created_properties():
         
         properties_with_details.append(property_dict)
 
-    # Retourner directement la liste pour être cohérent avec les autres routes
-    return jsonify(properties_with_details), 200
+    total_count = len(properties)
+    validated_count = sum(1 for p in properties if p.is_validated)
+
+    # Retourner l'objet avec les comptes
+    return jsonify({
+        'properties': properties_with_details,
+        'total_count': total_count,
+        'validated_count': validated_count
+    }), 200
 
 
 @agents_bp.route('/upload_image', methods=['POST'])
