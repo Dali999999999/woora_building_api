@@ -1338,6 +1338,7 @@ def create_agent_property_request():
     city = request_values.get('city')
     min_price = request_values.get('min_price')
     max_price = request_values.get('max_price')
+    preferred_status = request_values.get('status')
 
     # --- NOUVEAU : Validation 50% Remplissage ---
     # base_fields : city, min_price (ou max_price)
@@ -1372,6 +1373,7 @@ def create_agent_property_request():
         city=city,
         min_price=min_price,
         max_price=max_price,
+        preferred_status=preferred_status,
         
         request_details=request_details_str, 
         
@@ -1381,7 +1383,16 @@ def create_agent_property_request():
     try:
         db.session.add(new_request)
         db.session.commit()
-        return jsonify({'message': "Alerte agent enregistrée avec succès."}), 201
+
+        # --- TRIGGER MATCHING ---
+        from app.utils.matching_utils import find_matches_for_request
+        try:
+            find_matches_for_request(new_request.id)
+        except Exception as e:
+            current_app.logger.error(f"Error triggering matching for agent request {new_request.id}: {e}")
+        # ------------------------
+
+        return jsonify({'message': "Alerte agent enregistrée avec succès.", 'request': new_request.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur création alerte agent: {e}", exc_info=True)

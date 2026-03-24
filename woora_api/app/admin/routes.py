@@ -967,6 +967,8 @@ def mark_property_as_transacted(property_id):
         ref = Referral.query.get(first_request.referral_id)
         if ref and ref.agent_id:
             agent_to_pay = User.query.get(ref.agent_id)
+            # Marquer le code comme utilisé pour éviter qu'il ne serve à d'autres transactions
+            ref.status = 'used'
 
     # Si un agent doit être payé (Parrainage à la première demande)
     if agent_to_pay and agent_to_pay.role == 'agent':

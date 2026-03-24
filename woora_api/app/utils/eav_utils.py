@@ -35,13 +35,13 @@ def save_property_eav_values(property_id, dynamic_attributes):
         
     attr_map = get_normalized_attributes()
     
-    # Liste des clés qu'on sait appartenir directement à la table Properties principale, pas la peine d'en faire du EAV
-    system_keys = ['price', 'title', 'status', 'description', 'address', 'city', 'latitude', 'longitude', 'jours_visite', 'horaires_visite', 'postal_code', 'property_type_id']
+    # Clés à ignorer car stockées dans Properties (colonne)
+    system_keys = ['price', 'title', 'status', 'description', 'address', 'city', 'latitude', 'longitude', 'jours_visite', 'horaires_visite', 'postal_code', 'property_type_id', 'is_validated', 'created_at', 'updated_at', 'deleted_at']
+
+    # On ne supprime plus tout d'un coup pour éviter la perte de données (Merge/Upsert)
+    # PropertyValue.query.filter_by(property_id=property_id).delete() # REMOVED
     
-    # Nettoyer les anciennes valeurs EAV pour ce bien (en cas de mise à jour / PUT)
-    PropertyValue.query.filter_by(property_id=property_id).delete()
-    
-    unique_attrs = set()
+    unique_attrs_processed = set()
 
     for key, val in dynamic_attributes.items():
         if val is None or val == "":
@@ -65,9 +65,16 @@ def save_property_eav_values(property_id, dynamic_attributes):
             continue
             
         attr_id = found_attr.id
-        if attr_id in unique_attrs:
-            continue # Evite le double save de la meme carac si le payload est sale
-        unique_attrs.add(attr_id)
+        if attr_id in unique_attrs_processed:
+            continue 
+        unique_attrs_processed.add(attr_id)
+
+        # Si la valeur est nulle ou vide, on supprime l'attribut s'il existe
+        if val is None or str(val).strip() == '':
+            existing_pv = PropertyValue.query.filter_by(property_id=property_id, attribute_id=attr_id).first()
+            if existing_pv:
+                db.session.delete(existing_pv)
+            continue
 
         d_type = found_attr.data_type
         v_str, v_int, v_bool, v_dec = None, None, None, None
@@ -86,21 +93,30 @@ def save_property_eav_values(property_id, dynamic_attributes):
             elif d_type == 'decimal':
                 v_dec = float(val)
             else:
-                v_str = str(val)[:255]
+                v_str = str(val)[:255] if val is not None else None
         except Exception:
             continue
             
         if v_str is None and v_int is None and v_bool is None and v_dec is None:
             continue
             
-        pv = PropertyValue(
-            property_id=property_id,
-            attribute_id=attr_id,
-            value_string=v_str,
-            value_integer=v_int,
-            value_boolean=v_bool,
-            value_decimal=v_dec
-        )
-        db.session.add(pv)
+        # --- UPSERT LOGIC ---
+        existing_pv = PropertyValue.query.filter_by(property_id=property_id, attribute_id=attr_id).first()
+        
+        if existing_pv:
+            existing_pv.value_string = v_str
+            existing_pv.value_integer = v_int
+            existing_pv.value_boolean = v_bool
+            existing_pv.value_decimal = v_dec
+        else:
+            new_pv = PropertyValue(
+                property_id=property_id,
+                attribute_id=attr_id,
+                value_string=v_str,
+                value_integer=v_int,
+                value_boolean=v_bool,
+                value_decimal=v_dec
+            )
+            db.session.add(new_pv)
     
     db.session.flush() # Appliquer dans la transaction courante sans commiter (ça sera commité par la Route parent)

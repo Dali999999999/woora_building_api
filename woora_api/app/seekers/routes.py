@@ -301,6 +301,7 @@ def create_property_request():
     city = request_values.get('city')
     min_price = request_values.get('min_price')
     max_price = request_values.get('max_price')
+    preferred_status = request_values.get('status') # This is sent as 'status' inside request_details by Flutter
 
     # --- NOUVEAU : Validation 50% Remplissage ---
     total_fields = 2 # Ville, Prix (on compte la fourchette comme 1 champ logique)
@@ -329,6 +330,7 @@ def create_property_request():
         city=city,
         min_price=min_price,
         max_price=max_price,
+        preferred_status=preferred_status,
         
         # On sauvegarde la chaîne JSON complète pour référence et pour les attributs dynamiques
         request_details=request_details_str, 
@@ -336,12 +338,19 @@ def create_property_request():
         status='new'
     )
 
-    # --- FIN DE LA LOGIQUE CORRIGÉE ---
-
     try:
         db.session.add(new_request)
         db.session.commit()
-        return jsonify({'message': "Votre alerte a bien été enregistrée. Nous vous contacterons bientôt."}), 201
+
+        # --- TRIGGER MATCHING ---
+        from app.utils.matching_utils import find_matches_for_request
+        try:
+            find_matches_for_request(new_request.id)
+        except Exception as e:
+            current_app.logger.error(f"Error triggering matching for request {new_request.id}: {e}")
+        # ------------------------
+
+        return jsonify({'message': "Votre alerte a bien été enregistrée. Nous vous contacterons bientôt.", 'request': new_request.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de la création de la demande de bien: {e}", exc_info=True)
@@ -581,11 +590,9 @@ def submit_visit_request(property_id):
                      # Code invalide : on retourne une erreur explicite
                      return jsonify({'error': 'Code de parrainage invalide.', 'message': 'Code de parrainage invalide.'}), 400
 
-                # VÉRIFICATION USAGE UNIQUE (Globale)
-                # On vérifie si ce code a DÉJÀ été utilisé par n'importe qui
-                usage_count = VisitRequest.query.filter_by(referral_id=referral.id).count()
-                if usage_count > 0:
-                     return jsonify({'error': 'Ce code de parrainage a déjà été utilisé.', 'message': 'Ce code de parrainage a déjà été utilisé.'}), 400
+                # VÉRIFICATION USAGE (Basée sur le statut du code)
+                if referral.status != 'active':
+                     return jsonify({'error': 'Ce code de parrainage est déjà utilisé ou expiré.', 'message': 'Ce code de parrainage est déjà utilisé ou expiré.'}), 400
 
                 # Si valide et non utilisé, on l'associe
                 referral_id = referral.id

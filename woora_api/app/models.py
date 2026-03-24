@@ -401,6 +401,7 @@ class Referral(db.Model):
     agent_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='CASCADE'), nullable=False)
     property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
     referral_code = db.Column(db.String(20), unique=True, nullable=False)
+    status = db.Column(db.String(20), default='active') # active, used, expired
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint('agent_id', 'property_id', name='unique_agent_property'),)
     
@@ -440,7 +441,8 @@ class VisitRequest(db.Model):
             'property': self.property.to_dict() if self.property else None,
             'referral': {
                 'id': self.referral.id,
-                'code': self.referral.referral_code
+                'code': self.referral.referral_code,
+                'status': self.referral.status
             } if self.referral else None
         }
 
@@ -464,6 +466,7 @@ class PropertyRequest(db.Model):
     city = db.Column(db.String(100))
     min_price = db.Column(db.Numeric(12, 2))
     max_price = db.Column(db.Numeric(12, 2))
+    preferred_status = db.Column(db.String(50)) # e.g., 'for_sale', 'for_rent'
     status = db.Column(db.Enum('new', 'in_progress', 'contacted', 'closed'), nullable=False, default='new')
     admin_notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -510,6 +513,7 @@ class PropertyRequest(db.Model):
             'city': self.city,
             'min_price': float(self.min_price) if self.min_price is not None else None,
             'max_price': float(self.max_price) if self.max_price is not None else None,
+            'preferred_status': self.preferred_status,
             'request_details': self.request_details,
             'criteria': criteria_dict, # FIX: Added parsed dictionary criteria for Admin panel
             'status': self.status,
