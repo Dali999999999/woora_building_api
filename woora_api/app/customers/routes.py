@@ -15,8 +15,8 @@ customers_bp = Blueprint('customers', __name__, url_prefix='/customers')
 def initiate_visit_pass_payment():
     user_id = get_jwt_identity()
     user = User.query.get_or_404(user_id)
-    if user.role != 'customer':
-        return jsonify({'error': 'Accès refusé : rôle customer requis.'}), 403
+    if user.role not in ['customer', 'agent']:
+        return jsonify({'error': 'Accès refusé : rôle requis.'}), 403
 
     data = request.get_json() or {}
     quantity = data.get('quantity', 1)
@@ -530,8 +530,8 @@ def verify_and_process_payment(transaction_id):
     user_id = get_jwt_identity()
     user = User.query.get_or_404(user_id)
     
-    if user.role != 'customer':
-        return jsonify({'error': 'Accès refusé : rôle customer requis.'}), 403
+    if user.role not in ['customer', 'agent']:
+        return jsonify({'error': 'Accès refusé : rôle requis.'}), 403
     
     print(f"🔍 Vérification paiement - Transaction: {transaction_id}, User: {user_id}")
     

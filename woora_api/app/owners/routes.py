@@ -436,8 +436,9 @@ def get_owner_visit_requests():
     # On fait une jointure pour ne récupérer que les demandes de visite (vr)
     # qui appartiennent à des biens (Property) dont l'owner_id est celui de l'utilisateur connecté.
     # C'est la requête la plus sûre et la plus efficace.
+    from sqlalchemy import or_
     visit_requests = db.session.query(VisitRequest).join(Property).filter(
-        Property.owner_id == current_user_id,
+        or_(Property.owner_id == current_user_id, Property.agent_id == current_user_id),
         VisitRequest.status == 'confirmed' # On ne montre que celles à traiter
     ).all()
 
@@ -473,9 +474,10 @@ def accept_visit_request_by_owner(request_id):
 
     # On fait une requête unique qui trouve la demande ET vérifie l'appartenance.
     # On cherche une VisitRequest...
+    from sqlalchemy import or_
     visit_request = db.session.query(VisitRequest).join(Property).filter(
-        VisitRequest.id == request_id,              # ... avec le bon ID
-        Property.owner_id == current_user_id      # ... ET qui appartient à un bien du propriétaire connecté.
+        VisitRequest.id == request_id,
+        or_(Property.owner_id == current_user_id, Property.agent_id == current_user_id)
     ).first()
 
     # Si la requête ne trouve rien, c'est soit que la demande n'existe pas,
@@ -519,9 +521,10 @@ def reject_visit_request_by_owner(request_id):
     current_user_id = get_jwt_identity()
 
     # On utilise exactement la même requête de vérification que pour 'accept'
+    from sqlalchemy import or_
     visit_request = db.session.query(VisitRequest).join(Property).filter(
         VisitRequest.id == request_id,
-        Property.owner_id == current_user_id
+        or_(Property.owner_id == current_user_id, Property.agent_id == current_user_id)
     ).first()
 
     if not visit_request:

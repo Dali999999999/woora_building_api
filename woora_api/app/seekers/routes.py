@@ -540,8 +540,8 @@ def submit_visit_request(property_id):
         
         # VALIDATION: Seuls les customers peuvent demander des visites
         user = User.query.get(user_id)
-        if not user or user.role != 'customer':
-            return jsonify({"error": "Seuls les clients peuvent demander des visites."}), 403
+        if not user or user.role not in ['customer', 'agent']:
+            return jsonify({"error": "Seuls les clients et agents peuvent demander des visites."}), 403
         
         data = request.get_json()
         

@@ -416,6 +416,7 @@ def get_properties():
     search_query = request.args.get('search', '').strip()
     property_type_id = request.args.get('property_type_id')
     status_id = request.args.get('status_id')
+    is_validated = request.args.get('is_validated')
 
     # 2. Base Query (Exclude soft-deleted)
     query = Property.query.filter(Property.deleted_at == None).options(selectinload(Property.owner))
@@ -442,6 +443,12 @@ def get_properties():
             query = query.filter(Property.status_id == int(status_id))
         except (ValueError, TypeError):
             pass
+
+    if is_validated is not None:
+        if is_validated.lower() in ['false', '0']:
+            query = query.filter(Property.is_validated == False)
+        elif is_validated.lower() in ['true', '1']:
+            query = query.filter(Property.is_validated == True)
 
     # 5. Sorting & Pagination
     query = query.order_by(Property.created_at.desc())
