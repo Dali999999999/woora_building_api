@@ -198,20 +198,6 @@ def authenticate_user(email, password):
 
 def send_reset_password_email(email, code):
     """Envoie un email avec le code de réinitialisation de mot de passe."""
-    msg = Message('Votre Code de Réinitialisation de Mot de Passe', # Sujet différent
-                    sender=current_app.config['MAIL_DEFAULT_SENDER'],
-                    recipients=[email])
-    # Corps du message différent
-    msg.body = f'Votre code de réinitialisation de mot de passe est : {code}. Ce code est valide pendant 10 minutes.'
-    try:
-        mail.send(msg)
-        return True
-    except Exception as e:
-        current_app.logger.error(f'Erreur lors de l\'envoi de l\'e-mail à {email}: {e}')
-        return False
-
-def send_reset_password_email(email, code):
-    """Envoie un email avec le code de réinitialisation de mot de passe."""
     msg = Message('Votre Code de Réinitialisation de Mot de Passe',
                     sender=current_app.config['MAIL_DEFAULT_SENDER'],
                     recipients=[email])

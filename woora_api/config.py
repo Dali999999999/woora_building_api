@@ -1,4 +1,9 @@
 import os
+from dotenv import load_dotenv
+
+# Charger .env explicitement ici aussi (sécurité si Config est importé directement)
+_basedir = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(_basedir, '.env'))
 
 class Config:
     # Security: Force environment variables for secrets (no fallback)
@@ -29,13 +34,19 @@ class Config:
     JWT_ACCESS_COOKIE_NAME = 'access_token_cookie'
     JWT_REFRESH_COOKIE_NAME = 'refresh_token_cookie'
 
-    # Configuration pour Flask-Mail (pour l'envoi d'e-mails de vérification)
-    MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.example.com'
-    MAIL_PORT = int(os.environ.get('MAIL_PORT') or 587)
-    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS') is not None
+    # Configuration pour Flask-Mail (envoi d'e-mails de vérification & notifications)
+    MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.gmail.com'
+    MAIL_PORT = int(os.environ.get('MAIL_PORT') or 465)
+    # Parsing booléen correct : 'True' -> True, tout autre valeur -> False
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'False').strip().lower() == 'true'
+    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'False').strip().lower() == 'true'
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'noreply@example.com'
+    # Supprime les espaces du mot de passe (App Password Gmail peut contenir des espaces)
+    _mail_password_raw = os.environ.get('MAIL_PASSWORD', '')
+    MAIL_PASSWORD = _mail_password_raw.replace(' ', '') if _mail_password_raw else None
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or os.environ.get('MAIL_USERNAME') or 'noreply@example.com'
+    MAIL_MAX_EMAILS = None
+    MAIL_ASCII_ATTACHMENTS = False
 
     # Configuration Cloudinary (Géré automatiquement par CLOUDINARY_URL)
     # Plus besoin de clés explicites ici si .env est correct
