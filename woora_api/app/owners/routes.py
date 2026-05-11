@@ -7,9 +7,12 @@ from app.models import Property, PropertyImage, User, PropertyType, VisitRequest
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
-from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
-# from app.utils.mega_utils import get_mega_instance # REMOVED: Migration Cloudinary
-from app.utils.email_utils import send_owner_acceptance_notification, send_owner_rejection_notification
+from app.utils.email_utils import (
+    send_owner_acceptance_notification,
+    send_owner_rejection_notification,
+    send_owner_accepted_to_admin
+)
+
 from app.utils.eav_utils import save_property_eav_values
 from werkzeug.utils import secure_filename
 
@@ -428,32 +431,27 @@ def delete_owner_property(property_id):
 @jwt_required()
 def get_owner_visit_requests():
     """
-    Récupère toutes les demandes de visite pour les biens d'un propriétaire,
-    à condition que la demande ait été confirmée par un administrateur.
+    Récupère toutes les demandes de visite en attente pour les biens d'un propriétaire/agent.
+    Retourne uniquement les demandes avec statut 'pending' (non encore traitées par le proprio).
+    CONFIDENTIALITÉ : Ne retourne JAMAIS les données personnelles du client.
     """
     current_user_id = get_jwt_identity()
     
-    # On fait une jointure pour ne récupérer que les demandes de visite (vr)
-    # qui appartiennent à des biens (Property) dont l'owner_id est celui de l'utilisateur connecté.
-    # C'est la requête la plus sûre et la plus efficace.
     from sqlalchemy import or_
     visit_requests = db.session.query(VisitRequest).join(Property).filter(
         or_(Property.owner_id == current_user_id, Property.agent_id == current_user_id),
-        VisitRequest.status == 'confirmed' # On ne montre que celles à traiter
-    ).all()
+        VisitRequest.status == 'pending'  # Le proprio voit les demandes en attente de SON action
+    ).order_by(VisitRequest.created_at.desc()).all()
 
-    # On construit la réponse
     result = []
     for req in visit_requests:
-        # Les relations back_populates nous permettent d'accéder facilement aux objets liés
-        customer = req.customer
         property_obj = req.property
         
         req_dict = {
             'id': req.id,
-            'customer_name': f'{customer.first_name} {customer.last_name}' if customer else 'Client inconnu',
-            'customer_email': customer.email if customer else 'Email inconnu',
+            # CONFIDENTIALITÉ : Pas de données client (nom, email, téléphone)
             'property_title': property_obj.title if property_obj else 'Bien inconnu',
+            'property_id': req.property_id,
             'requested_datetime': req.requested_datetime.isoformat(),
             'status': req.status,
             'message': req.message,
@@ -467,45 +465,46 @@ def get_owner_visit_requests():
 @jwt_required()
 def accept_visit_request_by_owner(request_id):
     """
-    Accepte une demande de visite.
-    La logique de vérification est maintenant unifiée et robuste.
+    Le propriétaire/agent accepte une demande de visite 'pending'.
+    -> Passe le statut à 'owner_accepted'.
+    -> Notifie l'admin pour validation finale.
+    -> NE notifie PAS le client (c'est le rôle de l'admin).
     """
     current_user_id = get_jwt_identity()
 
-    # On fait une requête unique qui trouve la demande ET vérifie l'appartenance.
-    # On cherche une VisitRequest...
     from sqlalchemy import or_
     visit_request = db.session.query(VisitRequest).join(Property).filter(
         VisitRequest.id == request_id,
         or_(Property.owner_id == current_user_id, Property.agent_id == current_user_id)
     ).first()
 
-    # Si la requête ne trouve rien, c'est soit que la demande n'existe pas,
-    # soit qu'elle n'appartient pas au propriétaire. La réponse est la même.
     if not visit_request:
         return jsonify({'message': "Demande de visite non trouvée ou non associée à vos propriétés."}), 404
 
-    # On vérifie que le statut est bien 'confirmed' avant d'agir
-    if visit_request.status != 'confirmed':
+    # Vérifier que le statut est bien 'pending' avant d'agir
+    if visit_request.status != 'pending':
         return jsonify({'message': f"Cette demande ne peut pas être acceptée car son statut est '{visit_request.status}'."}), 400
 
-    visit_request.status = 'accepted'
-    visit_request.customer_has_unread_update = True
+    visit_request.status = 'owner_accepted'
 
     try:
         db.session.commit()
 
-        # Envoyer une notification par e-mail au client
-        customer = visit_request.customer
+        # Notifier l'admin que le propriétaire a accepté et qu'une validation finale est requise
         property_obj = visit_request.property
-        if customer and property_obj:
-            send_owner_acceptance_notification(
-                customer.email,
-                property_obj.title,
-                visit_request.requested_datetime.strftime('%d/%m/%Y à %Hh%M')
-            )
+        try:
+            # Récupérer l'email admin
+            admin = User.query.filter_by(role='admin').first()
+            if admin and property_obj:
+                send_owner_accepted_to_admin(
+                    admin.email,
+                    property_obj.title,
+                    visit_request.requested_datetime.strftime('%d/%m/%Y à %Hh%M')
+                )
+        except Exception as e:
+            current_app.logger.warning(f"Échec envoi email admin (proprio accepté): {e}")
 
-        return jsonify({'message': 'Demande de visite acceptée avec succès. Notification envoyée au client.'}), 200
+        return jsonify({'message': 'Demande acceptée. L\'administrateur va maintenant valider la visite.'}), 200
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur lors de l'acceptation de la demande de visite par le propriétaire: {e}", exc_info=True)
@@ -515,12 +514,12 @@ def accept_visit_request_by_owner(request_id):
 @jwt_required()
 def reject_visit_request_by_owner(request_id):
     """
-    Rejette une demande de visite.
-    La logique de vérification est identique à celle de l'acceptation.
+    Le propriétaire/agent refuse une demande de visite 'pending'.
+    -> Rembourse le pass de visite au client.
+    -> Notifie le client du refus.
     """
     current_user_id = get_jwt_identity()
 
-    # On utilise exactement la même requête de vérification que pour 'accept'
     from sqlalchemy import or_
     visit_request = db.session.query(VisitRequest).join(Property).filter(
         VisitRequest.id == request_id,
@@ -530,28 +529,20 @@ def reject_visit_request_by_owner(request_id):
     if not visit_request:
         return jsonify({'message': "Demande de visite non trouvée ou non associée à vos propriétés."}), 404
 
-    if visit_request.status != 'confirmed':
-        return jsonify({'message': f"Cette demande ne peut pas être rejetée car son statut est '{visit_request.status}'."}), 400
+    if visit_request.status != 'pending':
+        return jsonify({'message': f"Cette demande ne peut pas être refusée car son statut est '{visit_request.status}'."}), 400
 
     visit_request.status = 'rejected'
     visit_request.customer_has_unread_update = True
     
-    # On récupère le message de rejet optionnel
     data = request.get_json() or {}
-    message = data.get('message', 'La demande de visite a été rejetée par le propriétaire.')
+    message = data.get('message', 'La demande de visite a été refusée par le propriétaire.')
 
     try:
-        # REMBOURSEMENT AUTOMATIQUE DU PASS
-        # On verrouille la ligne client pour éviter les incohérences
-        if visit_request.customer_id:
-            customer_to_refund = User.query.with_for_update().get(visit_request.customer_id)
-            if customer_to_refund:
-                customer_to_refund.visit_passes += 1
-                current_app.logger.info(f"Remboursement de 1 pass au client {customer_to_refund.id} suite au rejet de la visite {visit_request.id}")
-
+        # Plus de remboursement ici car le pass n'est déduit qu'à la fin (Effectuée)
         db.session.commit()
 
-        # Envoyer une notification par e-mail au client
+        # Notifier le client du refus
         customer = visit_request.customer
         property_obj = visit_request.property
         if customer and property_obj:
@@ -561,10 +552,10 @@ def reject_visit_request_by_owner(request_id):
                 message
             )
 
-        return jsonify({'message': 'Demande de visite rejetée avec succès. Notification envoyée au client.'}), 200
+        return jsonify({'message': 'Demande de visite refusée. Notification envoyée au client.'}), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erreur lors du rejet de la demande de visite par le propriétaire: {e}", exc_info=True)
+        current_app.logger.error(f"Erreur lors du refus de la demande de visite par le propriétaire: {e}", exc_info=True)
         return jsonify({'message': 'Erreur interne du serveur.'}), 500
 
 # --- AJOUT DE DEUX NOUVELLES ROUTES POUR LES PROPRIÉTAIRES ---

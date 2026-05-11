@@ -496,7 +496,14 @@ def validate_property(property_id):
     return jsonify({'message': f"Bien '{prop.title}' validé avec succès.", 'property': prop.to_dict()}), 200
 
 from app.models import Property, PropertyImage, User, PropertyType, VisitRequest,  PropertyAttributeScope, PropertyAttribute, AttributeOption, PropertyRequest
-from app.utils.email_utils import send_admin_response_to_seeker, send_property_invalidation_email, send_alert_match_email, send_commission_paid_notification, send_deal_closed_client_notification
+from app.utils.email_utils import (
+    send_admin_response_to_seeker,
+    send_property_invalidation_email,
+    send_alert_match_email,
+    send_commission_paid_notification,
+    send_deal_closed_client_notification,
+    send_owner_acceptance_notification
+)
 
 # ... (other code)
 
@@ -803,33 +810,33 @@ def get_visit_requests():
 @admin_bp.route('/visit_requests/<int:request_id>/confirm', methods=['PUT'])
 def confirm_visit_request(request_id):
     vr = VisitRequest.query.get_or_404(request_id)
-    if vr.status != 'pending':
-        return jsonify({'message': 'Pas en attente.'}), 400
-    vr.status = 'confirmed'
+    if vr.status != 'owner_accepted':
+        return jsonify({'message': 'Cette demande ne peut pas être confirmée. Le propriétaire doit d’abord l’accepter.'}), 400
+    vr.status = 'accepted'
     vr.customer_has_unread_update = True
     try:
         db.session.commit()
-        owner = User.query.get(Property.query.get(vr.property_id).owner_id)
+        # Notifier le CLIENT que la visite est définitivement confirmée
         customer = User.query.get(vr.customer_id)
         prop = Property.query.get(vr.property_id)
-        if owner and customer and prop:
-            send_admin_confirmation_to_owner(
-                owner.email,
-                f'{customer.first_name} {customer.last_name}',
+        if customer and prop:
+            send_owner_acceptance_notification(
+                customer.email,
                 prop.title,
-                vr.requested_datetime.strftime('%Y-%m-%d %H:%M')
+                vr.requested_datetime.strftime('%d/%m/%Y à %Hh%M')
             )
-        return jsonify({'message': 'Confirmée.'}), 200
+        return jsonify({'message': 'Visite confirmée. Le client a été notifié.'}), 200
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Erreur confirmation visite admin: {e}")
         return jsonify({'message': 'Erreur.'}), 500
 
 @admin_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
 def reject_visit_request_by_admin(request_id):
     vr = VisitRequest.query.get_or_404(request_id)
     
-    # MODIF: On autorise le rejet/annulation pour 'pending', 'confirmed' et 'accepted'
-    if vr.status not in ['pending', 'confirmed', 'accepted']:
+    # L'admin peut refuser depuis 'pending', 'owner_accepted' ou 'accepted'
+    if vr.status not in ['pending', 'owner_accepted', 'accepted']:
         return jsonify({'message': 'Impossible d\'annuler une visite déjà effectuée ou rejetée.'}), 400
         
     vr.status = 'rejected'
@@ -838,7 +845,6 @@ def reject_visit_request_by_admin(request_id):
     
     try:
         # REMBOURSEMENT AUTOMATIQUE DU PASS
-        # Si le client a payé un pass (déduit à la création), on le rembourse
         if vr.customer_id:
             customer_to_refund = User.query.with_for_update().get(vr.customer_id)
             if customer_to_refund:
@@ -847,7 +853,7 @@ def reject_visit_request_by_admin(request_id):
 
         db.session.commit()
         
-        # Notification
+        # Notification au client
         customer = User.query.get(vr.customer_id)
         prop = Property.query.get(vr.property_id)
         if customer and prop:
@@ -1502,6 +1508,14 @@ def get_all_visit_requests_admin():
                 'customer_id': vr.customer_id,
                 'customer_name': f"{vr.customer.first_name} {vr.customer.last_name}" if vr.customer else 'Client inconnu',
                 'customer_email': vr.customer.email if vr.customer else None,
+                'customer_phone': vr.customer.phone_number if vr.customer else 'N/A',
+                'owner_name': f"{vr.property.owner.first_name} {vr.property.owner.last_name}" if vr.property and vr.property.owner else 'Inconnu',
+                'owner_phone': vr.property.owner.phone_number if vr.property and vr.property.owner else 'N/A',
+                # Si un agent est différent du proprio, on l'ajoute
+                'agent_contact': {
+                    'name': f"{vr.property.agent.first_name} {vr.property.agent.last_name}",
+                    'phone': vr.property.agent.phone_number
+                } if vr.property and vr.property.agent and vr.property.agent_id != vr.property.owner_id else None,
                 'requested_datetime': vr.requested_datetime.isoformat() if vr.requested_datetime else None,
                 'status': vr.status,
                 'message': vr.message,
@@ -1525,8 +1539,9 @@ def get_all_visit_requests_admin():
 @jwt_required()
 def confirm_visit_request_admin(request_id):
     """
-    Confirme une demande de visite (passe de 'pending' à 'confirmed').
-    Accessible uniquement pour les administrateurs.
+    Validation finale d'une demande de visite par l'admin.
+    Nécessite que le propriétaire ait déjà accepté (statut 'owner_accepted').
+    Passe le statut à 'accepted' et notifie le client.
     """
     try:
         current_user_id = get_jwt_identity()
@@ -1539,15 +1554,29 @@ def confirm_visit_request_admin(request_id):
         if not visit_request:
             return jsonify({'error': 'Demande de visite non trouvée.'}), 404
         
-        if visit_request.status != 'pending':
-            return jsonify({'error': f"Cette demande ne peut pas être confirmée car son statut est '{visit_request.status}'."}), 400
+        if visit_request.status != 'owner_accepted':
+            return jsonify({'error': f"Cette demande ne peut pas être confirmée. Le propriétaire doit d’abord l’accepter (statut actuel : '{visit_request.status}')."}), 400
         
-        visit_request.status = 'confirmed'
+        visit_request.status = 'accepted'
+        visit_request.customer_has_unread_update = True
         db.session.commit()
         
-        current_app.logger.info(f"Demande de visite {request_id} confirmée par admin {current_user_id}")
+        # Notifier le CLIENT que la visite est définitivement confirmée
+        try:
+            customer = User.query.get(visit_request.customer_id)
+            prop = Property.query.get(visit_request.property_id)
+            if customer and prop:
+                send_owner_acceptance_notification(
+                    customer.email,
+                    prop.title,
+                    visit_request.requested_datetime.strftime('%d/%m/%Y à %Hh%M')
+                )
+        except Exception as email_err:
+            current_app.logger.warning(f"Erreur email confirmation client: {email_err}")
         
-        return jsonify({'message': 'Demande de visite confirmée avec succès.'}), 200
+        current_app.logger.info(f"Demande de visite {request_id} confirmée (accepted) par admin {current_user_id}")
+        
+        return jsonify({'message': 'Visite confirmée avec succès. Le client a été notifié.'}), 200
         
     except Exception as e:
         db.session.rollback()
@@ -1559,8 +1588,9 @@ def confirm_visit_request_admin(request_id):
 @jwt_required()
 def reject_visit_request_admin(request_id):
     """
-    Rejette une demande de visite.
-    Accessible uniquement pour les administrateurs.
+    Rejette/annule une demande de visite.
+    L'admin peut rejeter depuis 'pending', 'owner_accepted' ou 'accepted'.
+    Rembourse automatiquement le pass de visite au client.
     """
     try:
         current_user_id = get_jwt_identity()
@@ -1572,12 +1602,28 @@ def reject_visit_request_admin(request_id):
         visit_request = VisitRequest.query.get(request_id)
         if not visit_request:
             return jsonify({'error': 'Demande de visite non trouvée.'}), 404
+
+        if visit_request.status not in ['pending', 'owner_accepted', 'accepted']:
+            return jsonify({'error': f"Impossible de rejeter une visite avec le statut '{visit_request.status}'."}), 400
         
         data = request.get_json() or {}
         rejection_message = data.get('message', 'Demande rejetée par l\'administrateur.')
         
+        # Plus de remboursement ici car le pass n'est déduit qu'à la fin (Effectuée)
+
         visit_request.status = 'rejected'
+        visit_request.customer_has_unread_update = True
         db.session.commit()
+
+        # Notifier le client
+        try:
+            from app.utils.email_utils import send_admin_rejection_notification
+            customer = User.query.get(visit_request.customer_id)
+            prop = Property.query.get(visit_request.property_id)
+            if customer and prop:
+                send_admin_rejection_notification(customer.email, prop.title, rejection_message)
+        except Exception as email_err:
+            current_app.logger.warning(f"Erreur email rejet client: {email_err}")
         
         current_app.logger.info(f"Demande de visite {request_id} rejetée par admin {current_user_id}")
         
@@ -1586,6 +1632,50 @@ def reject_visit_request_admin(request_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Erreur lors du rejet de la demande de visite (admin): {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
+
+
+@admin_bp.route('/visit_requests/<int:request_id>/complete', methods=['PUT'])
+@jwt_required()
+def mark_visit_completed_admin(request_id):
+    """
+    Marque une visite comme 'Effectuée' (completed).
+    C'est à cette étape que le pass de visite est déduit du solde du client.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Accès non autorisé.'}), 403
+        
+        visit_request = VisitRequest.query.get(request_id)
+        if not visit_request:
+            return jsonify({'error': 'Demande de visite non trouvée.'}), 404
+            
+        if visit_request.status != 'accepted':
+            return jsonify({'error': "Seules les visites acceptées peuvent être marquées comme effectuées."}), 400
+
+        # DÉDUCTION DU PASS ICI (Règle métier cliente)
+        if visit_request.customer_id:
+            customer = User.query.with_for_update().get(visit_request.customer_id)
+            if customer:
+                if customer.visit_passes > 0:
+                    customer.visit_passes -= 1
+                    current_app.logger.info(f"Pass déduit pour le client {customer.id} (visite {request_id} effectuée)")
+                else:
+                    # Cas rare car vérifié à la soumission, mais on gère par sécurité
+                    current_app.logger.warning(f"Client {customer.id} n'a plus de pass pour la visite {request_id} effectuée")
+
+        visit_request.status = 'completed'
+        visit_request.customer_has_unread_update = True
+        db.session.commit()
+        
+        return jsonify({'message': 'Visite marquée comme effectuée. Le pass a été déduit.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de la complétion de la visite: {e}", exc_info=True)
         return jsonify({'error': 'Erreur interne du serveur.'}), 500
 
 

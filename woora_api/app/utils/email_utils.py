@@ -45,39 +45,80 @@ def get_email_template(title, body_content):
     </html>
     """
 
-def send_new_visit_request_notification(admin_email, customer_name, property_title, requested_datetime, message):
-    subject = f'Nouvelle Demande de Visite - {property_title}'
+def send_new_visit_request_notification(owner_email, property_title, requested_datetime, message):
+    """
+    Notifie le PROPRIÉTAIRE / AGENT d'une nouvelle demande de visite.
+    IMPORTANT : Ne contient AUCUNE donnée personnelle du client.
+    """
+    subject = f'Nouvelle Demande de Visite pour votre bien : {property_title}'
     
     body_html = f"""
-        <p>Bonjour Administrateur,</p>
-        <p>Une nouvelle demande de visite a été soumise sur la plateforme <strong>WOORA BUILDING</strong>.</p>
+        <p>Bonjour,</p>
+        <p>Une nouvelle demande de visite a été soumise pour votre bien <strong>"{property_title}"</strong> sur la plateforme <strong>WOORA Building</strong>.</p>
         
         <h3>Détails de la demande :</h3>
         <ul>
-            <li><strong>Client :</strong> {customer_name}</li>
             <li><strong>Bien :</strong> <span class="highlight">{property_title}</span></li>
             <li><strong>Date et Heure Souhaitées :</strong> {requested_datetime}</li>
         </ul>
         
-        <p><strong>Message du client :</strong></p>
-        <blockquote>{message if message else "Aucun message."}</blockquote>
+        <p><strong>Message du visiteur :</strong></p>
+        <blockquote>{message if message else "Aucun message particulier."}</blockquote>
         
-        <p>Veuillez vous connecter au panel d'administration pour traiter cette demande.</p>
+        <p>Veuillez vous connecter à votre application <strong>WOORA Building</strong> pour <strong>accepter</strong> ou <strong>refuser</strong> cette demande.</p>
+        <p>Cordialement,<br>L'équipe WOORA Building</p>
+    """
+
+    msg = Message(
+        subject,
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[owner_email],
+        html=get_email_template("Nouvelle Demande de Visite", body_html)
+    )
+    
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email de notification de nouvelle demande de visite envoyé au propriétaire {owner_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de l'envoi de l'email de notification au propriétaire: {e}", exc_info=True)
+        return False
+
+
+def send_owner_accepted_to_admin(admin_email, property_title, requested_datetime):
+    """
+    Notifie l'ADMIN que le propriétaire a accepté une demande de visite.
+    L'admin doit maintenant valider pour que le client reçoive la confirmation.
+    """
+    subject = f'Action requise : Demande de visite validée par le propriétaire – {property_title}'
+
+    body_html = f"""
+        <p>Bonjour Administrateur,</p>
+        <p>Le propriétaire du bien <strong>"{property_title}"</strong> a <strong style="color:#27AE60;">accepté</strong> une demande de visite.</p>
+
+        <h3>Détails :</h3>
+        <ul>
+            <li><strong>Bien :</strong> <span class="highlight">{property_title}</span></li>
+            <li><strong>Date et Heure Souhaitées :</strong> {requested_datetime}</li>
+        </ul>
+
+        <p>La demande est désormais en attente de votre <strong>validation finale</strong>. Connectez-vous au panel d'administration pour confirmer ou refuser cette visite.</p>
+        <p>Cordialement,<br>L'équipe WOORA Building</p>
     """
 
     msg = Message(
         subject,
         sender=current_app.config['MAIL_DEFAULT_SENDER'],
         recipients=[admin_email],
-        html=get_email_template("Nouvelle Demande de Visite", body_html)
+        html=get_email_template("Validation requise – Demande de visite", body_html)
     )
-    
+
     try:
         mail.send(msg)
-        current_app.logger.info(f"Email de notification de nouvelle demande de visite envoyé à {admin_email}")
+        current_app.logger.info(f"Email 'proprio a accepté' envoyé à l'admin {admin_email}")
         return True
     except Exception as e:
-        current_app.logger.error(f"Erreur lors de l'envoi de l'email de notification à l'admin: {e}", exc_info=True)
+        current_app.logger.error(f"Erreur envoi email owner_accepted à admin: {e}", exc_info=True)
         return False
 
 def send_admin_rejection_notification(customer_email, property_title, message):
@@ -90,8 +131,9 @@ def send_admin_rejection_notification(customer_email, property_title, message):
         <p><strong>Motif du refus :</strong></p>
         <blockquote>{message if message else "Aucune raison spécifique fournie."}</blockquote>
         
-        <p>N'hésitez pas à parcourir nos autres annonces sur <strong>WOORA BUILDING</strong> ou à nous contacter pour plus d'informations.</p>
-        <p>Cordialement,<br>L'équipe WOORA BUILDING</p>
+        <p>Nous vous invitons à choisir <strong>une autre date</strong> pour ce bien ou à consulter <strong>d'autres biens similaires</strong> en option sur notre plateforme, le temps qu'une nouvelle opportunité se présente.</p>
+        
+        <p>L'équipe WOORA Building reste à votre entière disposition pour vous accompagner dans vos recherches.</p>
     """
 
     msg = Message(
@@ -232,11 +274,15 @@ def send_account_deletion_email(user_email, user_name, reason):
         return False
 
 def send_admin_confirmation_to_owner(owner_email, customer_name, property_title, requested_datetime):
+    """
+    [DÉPRÉCIÉE – conservée pour compatibilité avec les visites 'confirmed' existantes]
+    Dans le nouveau flux, l'admin confirme après le propriétaire.
+    """
     subject = f'Demande de Visite Confirmée pour {property_title}'
     
     body_html = f"""
         <p>Bonjour Propriétaire,</p>
-        <p>Une demande de visite pour votre bien <strong>"{property_title}"</strong> a été pré-validée par l'administrateur <strong>WOORA BUILDING</strong>.</p>
+        <p>Une demande de visite pour votre bien <strong>"{property_title}"</strong> a été pré-validée par l'administrateur <strong>WOORA Building</strong>.</p>
         
         <h3>Détails de la demande :</h3>
         <ul>
@@ -245,7 +291,7 @@ def send_admin_confirmation_to_owner(owner_email, customer_name, property_title,
         </ul>
         
         <p>Veuillez vous connecter à votre application pour <strong>accepter</strong> ou <strong>refuser</strong> cette demande de visite.</p>
-        <p>Cordialement,<br>L'équipe WOORA BUILDING</p>
+        <p>Cordialement,<br>L'équipe WOORA Building</p>
     """
 
     msg = Message(
@@ -451,3 +497,45 @@ def send_deal_closed_client_notification(customer_email, customer_name, property
         current_app.logger.error(f"Erreur envoi email deal closed: {e}")
         return False
 
+def send_visit_request_confirmation_to_customer(customer_email, customer_name, property_title, requested_datetime):
+    """
+    Confirme au CLIENT que sa demande de visite a bien été reçue.
+    Lui explique le processus : proprio → admin → confirmation client.
+    """
+    subject = f'Demande de visite reçue – {property_title}'
+
+    body_html = f"""
+        <p>Bonjour {customer_name},</p>
+        <p>Votre demande de visite pour le bien <strong>"{property_title}"</strong> a bien été enregistrée sur <strong>WOORA Building</strong>.</p>
+
+        <h3>Récapitulatif :</h3>
+        <ul>
+            <li><strong>Bien :</strong> <span class="highlight">{property_title}</span></li>
+            <li><strong>Date et heure souhaitées :</strong> {requested_datetime}</li>
+        </ul>
+
+        <p><strong>Prochaines étapes :</strong></p>
+        <ol>
+            <li>Le propriétaire va être notifié de votre demande.</li>
+            <li>S'il l'accepte, l'équipe WOORA Building validera définitivement la visite.</li>
+            <li>Vous recevrez un email de confirmation dès que tout sera validé.</li>
+        </ol>
+
+        <p>Vous pouvez suivre l'état de votre demande dans l'application <strong>WOORA Building</strong>.</p>
+        <p>Cordialement,<br>L'équipe WOORA Building</p>
+    """
+
+    msg = Message(
+        subject,
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[customer_email],
+        html=get_email_template("Demande de visite reçue", body_html)
+    )
+
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email de confirmation de réception envoyé au client {customer_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur envoi email confirmation client: {e}", exc_info=True)
+        return False

@@ -9,7 +9,11 @@ from app.models import ServiceFee
 
 # Assurez-vous que le chemin vers vos utilitaires d'email est correct
 try:
-    from app.utils.email_utils import send_new_visit_request_notification, send_referral_used_notification, send_visit_request_confirmation_to_customer
+    from app.utils.email_utils import (
+        send_new_visit_request_notification,
+        send_referral_used_notification,
+        send_visit_request_confirmation_to_customer
+    )
 except ImportError:
     # Crée des fonctions factices si le fichier n'existe pas encore pour éviter une erreur d'import
     def send_new_visit_request_notification(*args, **kwargs): pass
@@ -571,11 +575,11 @@ def submit_visit_request(property_id):
         if requested_dt <= datetime.utcnow():
             return jsonify({'error': 'La date doit être dans le futur.'}), 400
         
-        # Vérifier s'il y a déjà une demande en cours (PENDING, CONFIRMED, ou ACCEPTED)
+        # Vérifier s'il y a déjà une demande en cours (PENDING, OWNER_ACCEPTED, ou ACCEPTED)
         active_request = VisitRequest.query.filter(
             VisitRequest.customer_id == user_id,
             VisitRequest.property_id == property_id,
-            VisitRequest.status.in_(['pending', 'confirmed', 'accepted'])
+            VisitRequest.status.in_(['pending', 'owner_accepted', 'confirmed', 'accepted'])
         ).first()
 
         if active_request:
@@ -635,17 +639,45 @@ def submit_visit_request(property_id):
             status='pending'
         )
         
-        # Déduction du pass de visite
-        user.visit_passes -= 1
+        # Le pass n'est plus déduit ici, mais uniquement quand la visite est marquée comme "Effectuée" par l'admin.
+        # On a déjà vérifié que user.visit_passes > 0 plus haut.
 
         db.session.add(visit_request)
         db.session.commit()
         
-        # Notification au propriétaire
+        # Notification au propriétaire du bien (sans données client pour la confidentialité)
         try:
-            send_new_visit_request_notification(visit_request)
+            owner = User.query.get(property_obj.owner_id)
+            if owner:
+                send_new_visit_request_notification(
+                    owner.email,
+                    property_obj.title,
+                    requested_dt.strftime('%d/%m/%Y à %Hh%M'),
+                    data.get('message')
+                )
+            # Notifier également l'agent si le bien en a un
+            if property_obj.agent_id and property_obj.agent_id != property_obj.owner_id:
+                agent = User.query.get(property_obj.agent_id)
+                if agent:
+                    send_new_visit_request_notification(
+                        agent.email,
+                        property_obj.title,
+                        requested_dt.strftime('%d/%m/%Y à %Hh%M'),
+                        data.get('message')
+                    )
         except Exception as e:
-            current_app.logger.warning(f"Échec envoi email notification: {e}")
+            current_app.logger.warning(f"Échec envoi email notification propriétaire: {e}")
+        
+        # Confirmation de réception au client
+        try:
+            send_visit_request_confirmation_to_customer(
+                user.email,
+                f"{user.first_name} {user.last_name}",
+                property_obj.title,
+                requested_dt.strftime('%d/%m/%Y à %Hh%M')
+            )
+        except Exception as e:
+            current_app.logger.warning(f"Échec envoi email confirmation client: {e}")
         
         current_app.logger.info(f"Demande de visite créée: {visit_request.id} pour propriété {property_id} par user {user_id}")
         
