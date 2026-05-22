@@ -17,6 +17,7 @@ class User(db.Model):
     role = db.Column(db.Enum('owner', 'agent', 'customer', 'admin'), nullable=False)
     wallet_balance = db.Column(db.Numeric(20, 2), default=0.00)
     visit_passes = db.Column(db.Integer, nullable=False, default=0)
+    subscription_expires_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     profile_picture_url = db.Column(db.String(255), nullable=True)
@@ -66,6 +67,7 @@ class User(db.Model):
             'last_name': self.last_name, 'phone_number': self.phone_number, 'role': self.role,
             'wallet_balance': float(self.wallet_balance) if self.wallet_balance is not None else None,
             'visit_passes': self.visit_passes, 'profile_picture_url': self.profile_picture_url,
+            'subscription_expires_at': self.subscription_expires_at.isoformat() if self.subscription_expires_at else None,
             'profession': self.profession, 'address': self.address, 'city': self.city,
             'country': self.country, 'bio': self.bio,
             'is_verified': self.is_verified,

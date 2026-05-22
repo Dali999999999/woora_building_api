@@ -46,8 +46,16 @@ def create_property():
     owner = User.query.get(current_user_id)
     if not owner or owner.role != 'owner':
         current_app.logger.warning(f"Accès non autorisé pour l'utilisateur {current_user_id} avec le rôle {owner.role if owner else 'N/A'}.")
-        # CORRECTION
         return jsonify({'message': "Accès non autorisé. Seuls les propriétaires peuvent créer des biens."}), 403
+
+    # --- SUBSCRIPTION LIMIT CHECK ---
+    from app.utils.subscription_utils import check_publication_limit
+    if not check_publication_limit(owner, 'owner'):
+        return jsonify({
+            'error_code': 'SUBSCRIPTION_REQUIRED',
+            'message': "Vous avez atteint la limite de publications gratuites. Veuillez souscrire à un abonnement pour publier d'autres biens."
+        }), 403
+    # --------------------------------
 
     property_type_id = dynamic_attributes.get('property_type_id')
     current_app.logger.debug(f"property_type_id brut: {property_type_id}, type: {type(property_type_id)}")
@@ -627,4 +635,145 @@ def upload_image_for_owner():
     else:
         return jsonify({'error': "Échec de l'upload vers Cloudinary"}), 500
 
+@owners_bp.route('/initiate-subscription-payment', methods=['POST'])
+@jwt_required()
+def initiate_subscription_payment():
+    """
+    Initie un paiement Fedapay pour l'abonnement du propriétaire.
+    """
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+    
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': "Accès non autorisé."}), 403
 
+    try:
+        from app.models import ServiceFee, AppSetting
+        import fedapay
+        from app.config import Config
+        import json
+        
+        sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+        if not sub_fee:
+            return jsonify({'message': "Service d'abonnement non configuré."}), 500
+        
+        amount = int(sub_fee.amount)
+
+        fedapay.api_key = Config.FEDAPAY_SECRET_KEY
+        fedapay.environment = Config.FEDAPAY_ENVIRONMENT
+
+        transaction = fedapay.Transaction.create(
+            amount=amount,
+            description="Abonnement de publication Woora",
+            currency={'iso': 'XOF'},
+            callback_url=f"woora://subscription_success",
+            customer={
+                'email': owner.email or f"user_{owner.id}@woora.com",
+                'phone_number': owner.phone,
+                'name': owner.name or owner.first_name
+            },
+            custom_metadata=json.dumps({
+                'user_id': owner.id,
+                'type': 'subscription',
+                'role': 'owner'
+            })
+        )
+
+        token = transaction.generate_token()
+        
+        return jsonify({
+            'checkout_url': token.url,
+            'transaction_id': transaction.id
+        }), 201
+
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Erreur d'initiation paiement abonnement (owner {current_user_id}): {e}")
+        return jsonify({'message': f"Erreur de paiement: {str(e)}"}), 500
+
+@owners_bp.route('/purchase-subscription', methods=['POST'])
+@jwt_required()
+def purchase_subscription():
+    """
+    Vérifie une transaction Fedapay et active l'abonnement du propriétaire.
+    """
+    current_user_id = get_jwt_identity()
+    owner = User.query.get(current_user_id)
+    
+    if not owner or owner.role != 'owner':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    data = request.get_json()
+    transaction_id = data.get('transaction_id')
+
+    if not transaction_id:
+        return jsonify({'message': "ID de transaction manquant."}), 400
+
+    try:
+        from app.models import ServiceFee, AppSetting
+        import fedapay
+        from datetime import datetime, timedelta
+        
+        # 1. Vérifier le prix de l'abonnement
+        sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+        if not sub_fee:
+            return jsonify({'message': "Service d'abonnement non configuré."}), 500
+        
+        # 2. Vérifier la durée de l'abonnement
+        duration_setting = AppSetting.query.filter_by(setting_key='property_subscription_duration_days').first()
+        duration_days = int(duration_setting.setting_value) if duration_setting and duration_setting.setting_value.isdigit() else 30
+        
+        # 3. Vérifier la transaction auprès de Fedapay
+        transaction = fedapay.Transaction.retrieve(transaction_id)
+        if transaction.status != 'approved':
+            return jsonify({'message': "Le paiement n'a pas été approuvé."}), 400
+
+        # 4. Valider le montant
+        expected_amount = int(sub_fee.amount)
+        if transaction.amount != expected_amount:
+            from flask import current_app
+            current_app.logger.warning(f"Alerte de sécurité (Subscription): Montant invalide pour user {owner.id}. Attendu: {expected_amount}, Reçu: {transaction.amount}")
+            return jsonify({'message': "Montant de la transaction invalide."}), 400
+
+        # 5. Activer l'abonnement
+        now = datetime.utcnow()
+        if owner.subscription_expires_at and owner.subscription_expires_at > now:
+            # S'il a déjà un abonnement actif, on prolonge à partir de la date d'expiration
+            owner.subscription_expires_at = owner.subscription_expires_at + timedelta(days=duration_days)
+        else:
+            # Sinon on active à partir de maintenant
+            owner.subscription_expires_at = now + timedelta(days=duration_days)
+            
+        from app.extensions import db
+        db.session.commit()
+        
+        return jsonify({
+            'message': f"Abonnement de {duration_days} jours activé avec succès.",
+            'subscription_expires_at': owner.subscription_expires_at.isoformat()
+        }), 200
+
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Erreur lors de la souscription à l'abonnement: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur lors de la vérification du paiement."}), 500
+@owners_bp.route('/subscription-price', methods=['GET'])
+@jwt_required()
+def get_subscription_price():
+    """
+    Retourne le prix et la durée de l'abonnement.
+    """
+    from app.models import ServiceFee, AppSetting
+    
+    sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+    duration_setting = AppSetting.query.filter_by(setting_key='property_subscription_duration_days').first()
+    limit_setting = AppSetting.query.filter_by(setting_key='free_property_publication_limit').first()
+    
+    price = float(sub_fee.amount) if sub_fee else 5000.0
+    duration_days = int(duration_setting.setting_value) if duration_setting and duration_setting.setting_value.isdigit() else 30
+    free_limit = int(limit_setting.setting_value) if limit_setting and limit_setting.setting_value.isdigit() else 5
+    
+    return jsonify({
+        'price': price,
+        'duration_days': duration_days,
+        'free_limit': free_limit
+    }), 200

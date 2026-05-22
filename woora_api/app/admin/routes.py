@@ -780,6 +780,65 @@ def update_visit_settings():
     db.session.commit()
     return jsonify({'message': 'Paramètres mis à jour.'}), 200
 
+@admin_bp.route('/settings/publications', methods=['GET'])
+def get_publication_settings():
+    limit = AppSetting.query.filter_by(setting_key='free_property_publication_limit').first()
+    duration = AppSetting.query.filter_by(setting_key='property_subscription_duration_days').first()
+    price = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+    return jsonify({
+        'free_property_publication_limit': int(limit.setting_value) if limit and limit.setting_value.isdigit() else 5,
+        'property_subscription_duration_days': int(duration.setting_value) if duration and duration.setting_value.isdigit() else 30,
+        'property_subscription_price': float(price.amount) if price else 5000.0
+    })
+
+@admin_bp.route('/settings/publications', methods=['PUT'])
+def update_publication_settings():
+    data = request.get_json()
+    
+    try:
+        limit_val = int(data.get('free_property_publication_limit', 5))
+        duration_val = int(data.get('property_subscription_duration_days', 30))
+        price_val = float(data.get('property_subscription_price', 5000.0))
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Valeurs invalides.'}), 422
+
+    limit = AppSetting.query.filter_by(setting_key='free_property_publication_limit').first()
+    if limit:
+        limit.setting_value = str(limit_val)
+    else:
+        db.session.add(AppSetting(
+            setting_key='free_property_publication_limit',
+            setting_value=str(limit_val),
+            data_type='integer',
+            description='Limite de publications gratuites'
+        ))
+
+    duration = AppSetting.query.filter_by(setting_key='property_subscription_duration_days').first()
+    if duration:
+        duration.setting_value = str(duration_val)
+    else:
+        db.session.add(AppSetting(
+            setting_key='property_subscription_duration_days',
+            setting_value=str(duration_val),
+            data_type='integer',
+            description='Durée de validité de l\'abonnement (jours)'
+        ))
+
+    price = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+    if price:
+        price.amount = price_val
+    else:
+        db.session.add(ServiceFee(
+            service_key='property_subscription_purchase',
+            name='Abonnement Publication Biens',
+            amount=price_val,
+            applicable_to_role='agent',
+            description='Prix de l\'abonnement'
+        ))
+
+    db.session.commit()
+    return jsonify({'message': 'Paramètres de publication mis à jour.'}), 200
+
 # ------------- VISITE REQUESTS -------------
 @admin_bp.route('/visit_requests', methods=['GET'])
 def get_visit_requests():

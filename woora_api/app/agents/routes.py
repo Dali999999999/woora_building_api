@@ -916,6 +916,15 @@ def create_property_for_agent():
         current_app.logger.warning(f"Accès non autorisé pour l'utilisateur {current_user_id} avec le rôle {agent.role if agent else 'N/A'}.")
         return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent créer des biens."}), 403
 
+    # --- SUBSCRIPTION LIMIT CHECK ---
+    from app.utils.subscription_utils import check_publication_limit
+    if not check_publication_limit(agent, 'agent'):
+        return jsonify({
+            'error_code': 'SUBSCRIPTION_REQUIRED',
+            'message': "Vous avez atteint la limite de publications gratuites. Veuillez souscrire à un abonnement pour publier d'autres biens."
+        }), 403
+    # --------------------------------
+
     property_type_id = dynamic_attributes.get('property_type_id')
     current_app.logger.debug(f"property_type_id brut: {property_type_id}, type: {type(property_type_id)}")
     try:
@@ -1125,327 +1134,167 @@ def get_agent_created_properties():
 @agents_bp.route('/upload_image', methods=['POST'])
 @jwt_required()
 def upload_image_for_agent():
-    """
-    Permet aux agents d'uploader des images pour les biens immobiliers.
-    """
     current_user_id = get_jwt_identity()
     agent = User.query.get(current_user_id)
     if not agent or agent.role != 'agent':
         return jsonify({'message': "Accès non autorisé."}), 403
 
-    # Même logique que pour les propriétaires et admin
+    # --- CLOUDINARY UPLOAD ---
+    # Pas besoin de sauvegarder temporairement le fichier, Cloudinary accepte le stream direct
     if 'file' not in request.files:
         return jsonify({'error': 'Aucun fichier fourni'}), 400
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'Nom de fichier vide'}), 400
 
-    from app.utils.cloudinary_utils import upload_image # Tardif
+    from app.utils.cloudinary_utils import upload_image # Import tardif pour éviter cycle
     
-    try:
-        secure_url = upload_image(file, folder="woora_properties") # Dossier properties
-        
-        if secure_url:
-            return jsonify({'url': secure_url}), 200
-        else:
-             return jsonify({'error': 'Erreur interne Cloudinary'}), 500
+    secure_url = upload_image(file, folder="woora_properties") # Dossier spécifique pour les biens
+    
+    if secure_url:
+        return jsonify({'url': secure_url}), 200
+    else:
+        return jsonify({'error': "Échec de l'upload vers Cloudinary"}), 500
 
-    except Exception as e:
-        current_app.logger.error(f"Upload error: {e}")
-        return jsonify({'error': 'Erreur interne'}), 500
-
-@agents_bp.route('/properties/<int:property_id>', methods=['PUT', 'OPTIONS'])
+@agents_bp.route('/initiate-subscription-payment', methods=['POST'])
 @jwt_required()
-def update_agent_created_property(property_id):
+def initiate_subscription_payment():
     """
-    Permet à un agent de modifier un bien immobilier qu'il a créé.
+    Initie un paiement Fedapay pour l'abonnement de l'agent.
     """
-    if request.method == 'OPTIONS':
-        return '', 204
-
     current_user_id = get_jwt_identity()
     agent = User.query.get(current_user_id)
+    
     if not agent or agent.role != 'agent':
-        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent modifier leurs biens créés."}), 403
-
-    # Vérifier que le bien existe et a été créé par cet agent
-    property = Property.query.filter_by(id=property_id, agent_id=current_user_id).first()
-    if not property:
-        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas l'agent créateur."}), 404
-
-    data = request.get_json()
-    if not data:
-        return jsonify({'message': "Corps de la requête manquant ou invalide."}), 400
-        
-    current_app.logger.debug(f"Données reçues pour la mise à jour du bien {property_id} par l'agent: {data}")
-
-    attributes_data = data.get('attributes')
-    if attributes_data:
-        # Mise à jour des champs statiques (même logique que pour les propriétaires)
-        if 'title' in attributes_data:
-            property.title = attributes_data['title']
-        
-        if 'price' in attributes_data:
-            try:
-                property.price = float(attributes_data['price']) if attributes_data['price'] is not None else None
-            except (ValueError, TypeError):
-                return jsonify({'message': "Le prix doit être un nombre valide."}), 400
-        
-        if 'status' in attributes_data:
-            raw_status = attributes_data['status']
-            if isinstance(raw_status, int) or (isinstance(raw_status, str) and raw_status.isdigit()):
-                status_obj = PropertyStatus.query.get(int(raw_status))
-                if status_obj:
-                    property.status_id = status_obj.id
-                    # Fallback pour la colonne legacy `status`
-                    name_to_slug = {'à vendre': 'for_sale', 'a vendre': 'for_sale', 'à louer': 'for_rent', 'a louer': 'for_rent', 'vefa': 'vefa', 'bailler': 'bailler', 'location-vente': 'location_vente', 'vendu': 'sold', 'loué': 'rented'}
-                    property.status = name_to_slug.get(status_obj.name.strip().lower(), 'for_sale')
-                else:
-                    return jsonify({'message': 'Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide défini par un entier.'}), 400
-            else:
-                 return jsonify({'message': "Statut de propriété invalide. L'usage d'identifiants (IDs) est désormais strictement requis pour le statut."}), 400
-            
-        if 'description' in attributes_data:
-            property.description = attributes_data.get('description')
-            
-        if 'address' in attributes_data:
-            property.address = attributes_data.get('address')
-            
-        if 'city' in attributes_data:
-            property.city = attributes_data.get('city')
-            
-        if 'postal_code' in attributes_data:
-            property.postal_code = attributes_data.get('postal_code')
-            
-        # Gestion des coordonnées GPS
-        if 'latitude' in attributes_data:
-            lat_val = attributes_data.get('latitude')
-            try:
-                property.latitude = float(lat_val) if lat_val and str(lat_val).lower() != 'null' else None
-            except (ValueError, TypeError):
-                return jsonify({'message': 'latitude doit être un nombre décimal valide.'}), 400
-                
-        if 'longitude' in attributes_data:
-            lon_val = attributes_data.get('longitude')
-            try:
-                property.longitude = float(lon_val) if lon_val and str(lon_val).lower() != 'null' else None
-            except (ValueError, TypeError):
-                return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
-
-        # --- EAV: Sauvegarde dans la nouvelle table relationnelle ---
-        try:
-            save_property_eav_values(property.id, attributes_data)
-        except Exception as e:
-            current_app.logger.error(f"EAV Saving failed: {e}")
-            raise e
-        # -------------------------------
-
-    # Gestion des images (même logique que pour les propriétaires)
-    if 'image_urls' in data:
-        PropertyImage.query.filter_by(property_id=property.id).delete()
-        db.session.flush()
-
-        image_urls = data.get('image_urls', [])
-        for i, image_url in enumerate(image_urls):
-            new_image = PropertyImage(
-                property_id=property.id,
-                image_url=image_url,
-                display_order=i
-            )
-            db.session.add(new_image)
+        return jsonify({'message': "Accès non autorisé."}), 403
 
     try:
-        db.session.commit()
+        from app.models import ServiceFee, AppSetting
+        import fedapay
+        from app.config import Config
+        import json
         
-        updated_property_dict = property.to_dict()
+        sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+        if not sub_fee:
+            return jsonify({'message': "Service d'abonnement non configuré."}), 500
+        
+        amount = int(sub_fee.amount)
+
+        fedapay.api_key = Config.FEDAPAY_SECRET_KEY
+        fedapay.environment = Config.FEDAPAY_ENVIRONMENT
+
+        transaction = fedapay.Transaction.create(
+            amount=amount,
+            description="Abonnement de publication Woora",
+            currency={'iso': 'XOF'},
+            callback_url=f"woora://subscription_success",
+            customer={
+                'email': agent.email or f"user_{agent.id}@woora.com",
+                'phone_number': agent.phone,
+                'name': agent.name or agent.first_name
+            },
+            custom_metadata=json.dumps({
+                'user_id': agent.id,
+                'type': 'subscription',
+                'role': 'agent'
+            })
+        )
+
+        token = transaction.generate_token()
         
         return jsonify({
-            'message': "Bien immobilier mis à jour avec succès par l'agent.",
-            'property': updated_property_dict
-        }), 200
+            'checkout_url': token.url,
+            'transaction_id': transaction.id
+        }), 201
+
     except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur lors de la mise à jour du bien immobilier par l'agent (rollback): {e}", exc_info=True)
-        return jsonify({'message': "Erreur lors de la mise à jour du bien immobilier.", 'error': str(e)}), 500
+        from flask import current_app
+        current_app.logger.error(f"Erreur d'initiation paiement abonnement (agent {current_user_id}): {e}")
+        return jsonify({'message': f"Erreur de paiement: {str(e)}"}), 500
 
-@agents_bp.route('/properties/<int:property_id>', methods=['DELETE'])
+@agents_bp.route('/purchase-subscription', methods=['POST'])
 @jwt_required()
-def delete_agent_created_property(property_id):
+def purchase_subscription():
     """
-    Permet à un agent de supprimer un bien immobilier qu'il a créé.
+    Vérifie une transaction Fedapay et active l'abonnement de l'agent.
     """
     current_user_id = get_jwt_identity()
     agent = User.query.get(current_user_id)
+    
     if not agent or agent.role != 'agent':
-        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent supprimer leurs biens créés."}), 403
-
-    # Vérifier que le bien existe et a été créé par cet agent
-    property = Property.query.filter_by(id=property_id, agent_id=current_user_id).first()
-    if not property:
-        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas l'agent créateur."}), 404
-
-    try:
-        db.session.delete(property)
-        db.session.commit()
-        return jsonify({'message': "Bien immobilier supprimé avec succès par l'agent."}), 204
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur lors de la suppression du bien immobilier par l'agent (rollback): {e}", exc_info=True)
-        return jsonify({'message': "Erreur lors de la suppression du bien immobilier.", 'error': str(e)}), 500
-
-@agents_bp.route('/properties/<int:property_id>', methods=['GET'])
-@jwt_required()
-def get_agent_created_property_details(property_id):
-    """
-    Récupère les détails d'un bien immobilier créé par l'agent.
-    """
-    current_user_id = get_jwt_identity()
-    agent = User.query.get(current_user_id)
-    if not agent or agent.role != 'agent':
-        return jsonify({'message': "Accès non autorisé. Seuls les agents peuvent voir les détails de leurs biens créés."}), 403
-
-    # Vérifier que le bien existe et a été créé par cet agent
-    property = Property.query.filter_by(id=property_id, agent_id=current_user_id).first()
-    if not property:
-        return jsonify({'message': "Bien immobilier non trouvé ou vous n'êtes pas l'agent créateur."}), 404
-
-    property_dict = property.to_dict()
-    property_dict['image_urls'] = [img.image_url for img in property.images] 
-    return jsonify(property_dict), 200
-
-# ==============================================================================
-# GESTION DES REQUÊTES / ALERTES PROPRIÉTÉS POUR AGENTS
-# ==============================================================================
-
-@agents_bp.route('/property-requests', methods=['POST'])
-@jwt_required()
-def create_agent_property_request():
-    """
-    Permet à un AGENT de soumettre une alerte / demande de bien.
-    """
-    current_user_id = get_jwt_identity()
-    agent = User.query.get(current_user_id)
-
-    if not agent or agent.role != 'agent':
-        return jsonify({'message': "Accès refusé. Seuls les agents peuvent créer des alertes ici."}), 403
+        return jsonify({'message': "Accès non autorisé."}), 403
 
     data = request.get_json()
-    if not data:
-        return jsonify({'message': "Données manquantes."}), 400
+    transaction_id = data.get('transaction_id')
 
-    # 1. On récupère la chaîne de caractères JSON
-    request_details_str = data.get('request_details', '{}')
-    try:
-        # 2. On la décode pour la transformer en dictionnaire Python
-        request_values = json.loads(request_details_str)
-    except json.JSONDecodeError:
-        return jsonify({'message': "Le format des détails de la requête est invalide."}), 400
-
-    # 3. On extrait les valeurs pour les colonnes structurées
-    city = request_values.get('city')
-    min_price = request_values.get('min_price')
-    max_price = request_values.get('max_price')
-    preferred_status = request_values.get('status')
-
-    # --- NOUVEAU : Validation 50% Remplissage ---
-    # base_fields : city, min_price (ou max_price)
-    # plus les attributs additionnels dans request_values
-    
-    total_fields = 2 # Ville, Prix (on compte la fourchette comme 1 champ sémantique)
-    filled_fields = 0
-    
-    if city: filled_fields += 1
-    if min_price or max_price: filled_fields += 1
-    
-    # On évalue les autres attributs dynamiques (ex: chambres, salles de bain)
-    for key, val in request_values.items():
-        if key not in ['city', 'min_price', 'max_price']:
-            total_fields += 1
-            # Si val est renseigné (non null, non string vide)
-            if val is not None and str(val).strip() != '':
-                 filled_fields += 1
-                 
-    completion_ratio = filled_fields / max(1, total_fields)
-    
-    if completion_ratio < 0.5:
-        return jsonify({'message': "Veuillez renseigner au moins 50% des critères pour valider cette alerte."}), 400
-    # --- FIN VALIDATION ---
-
-    # 4. On crée l'objet PropertyRequest
-    # On réutilise la colonne customer_id pour l'ID de l'agent (car User table unifiée)
-    new_request = PropertyRequest(
-        customer_id=current_user_id,
-        property_type_id=data.get('property_type_id'),
-        
-        city=city,
-        min_price=min_price,
-        max_price=max_price,
-        preferred_status=preferred_status,
-        
-        request_details=request_details_str, 
-        
-        status='new'
-    )
+    if not transaction_id:
+        return jsonify({'message': "ID de transaction manquant."}), 400
 
     try:
-        db.session.add(new_request)
+        from app.models import ServiceFee, AppSetting
+        import fedapay
+        from datetime import datetime, timedelta
+        
+        # 1. Vérifier le prix de l'abonnement
+        sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+        if not sub_fee:
+            return jsonify({'message': "Service d'abonnement non configuré."}), 500
+        
+        # 2. Vérifier la durée de l'abonnement
+        duration_setting = AppSetting.query.filter_by(setting_key='property_subscription_duration_days').first()
+        duration_days = int(duration_setting.setting_value) if duration_setting and duration_setting.setting_value.isdigit() else 30
+        
+        # 3. Vérifier la transaction auprès de Fedapay
+        transaction = fedapay.Transaction.retrieve(transaction_id)
+        if transaction.status != 'approved':
+            return jsonify({'message': "Le paiement n'a pas été approuvé."}), 400
+
+        # 4. Valider le montant
+        expected_amount = int(sub_fee.amount)
+        if transaction.amount != expected_amount:
+            from flask import current_app
+            current_app.logger.warning(f"Alerte de sécurité (Subscription): Montant invalide pour user {agent.id}. Attendu: {expected_amount}, Reçu: {transaction.amount}")
+            return jsonify({'message': "Montant de la transaction invalide."}), 400
+
+        # 5. Activer l'abonnement
+        now = datetime.utcnow()
+        if agent.subscription_expires_at and agent.subscription_expires_at > now:
+            # S'il a déjà un abonnement actif, on prolonge à partir de la date d'expiration
+            agent.subscription_expires_at = agent.subscription_expires_at + timedelta(days=duration_days)
+        else:
+            # Sinon on active à partir de maintenant
+            agent.subscription_expires_at = now + timedelta(days=duration_days)
+            
+        from app.extensions import db
         db.session.commit()
+        
+        return jsonify({
+            'message': f"Abonnement de {duration_days} jours activé avec succès.",
+            'subscription_expires_at': agent.subscription_expires_at.isoformat()
+        }), 200
 
-        # --- TRIGGER MATCHING ---
-        from app.utils.matching_utils import find_matches_for_request
-        try:
-            find_matches_for_request(new_request.id)
-        except Exception as e:
-            current_app.logger.error(f"Error triggering matching for agent request {new_request.id}: {e}")
-        # ------------------------
-
-        return jsonify({'message': "Alerte agent enregistrée avec succès.", 'request': new_request.to_dict()}), 201
     except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur création alerte agent: {e}", exc_info=True)
-        return jsonify({'message': "Erreur interne du serveur."}), 500
-
-@agents_bp.route('/property-requests', methods=['GET'])
+        from flask import current_app
+        current_app.logger.error(f"Erreur lors de la souscription à l'abonnement: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur lors de la vérification du paiement."}), 500
+@agents_bp.route('/subscription-price', methods=['GET'])
 @jwt_required()
-def get_agent_property_requests():
+def get_subscription_price():
     """
-    Récupère l'historique des alertes pour l'agent connecté.
+    Retourne le prix et la durée de l'abonnement pour les agents.
     """
-    current_user_id = get_jwt_identity()
-    agent = User.query.get(current_user_id)
-
-    if not agent or agent.role != 'agent':
-        return jsonify({'message': 'Accès refusé.'}), 403
-
-    # On récupère TOUTES les demandes de l'agent (historique complet), les plus récentes en premier
-    requests = PropertyRequest.query.filter_by(customer_id=current_user_id).order_by(PropertyRequest.created_at.desc()).all()
+    from app.models import ServiceFee, AppSetting
     
-    return jsonify([req.to_dict() for req in requests]), 200
-
-@agents_bp.route('/property-requests/<int:request_id>', methods=['DELETE'])
-@jwt_required()
-def delete_agent_property_request(request_id):
-    """
-    Permet à un AGENT de supprimer (fermer) une de ses alertes.
-    """
-    current_user_id = get_jwt_identity()
+    sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+    duration_setting = AppSetting.query.filter_by(setting_key='property_subscription_duration_days').first()
+    limit_setting = AppSetting.query.filter_by(setting_key='free_property_publication_limit').first()
     
-    # On cherche la requête (vérification que c'est bien celle de l'agent connecté)
-    req = PropertyRequest.query.filter_by(id=request_id, customer_id=current_user_id).first()
+    price = float(sub_fee.amount) if sub_fee else 5000.0
+    duration_days = int(duration_setting.setting_value) if duration_setting and duration_setting.setting_value.isdigit() else 30
+    free_limit = int(limit_setting.setting_value) if limit_setting and limit_setting.setting_value.isdigit() else 5
     
-    if not req:
-        return jsonify({'message': "Alerte non trouvée ou accès refusé."}), 404
-        
-    try:
-        # Fermeture (Soft Delete / Status Update)
-        req.status = 'closed'
-        req.archived_at = datetime.utcnow()
-        req.archived_by = current_user_id
-        
-        db.session.commit()
-        return jsonify({'message': "Alerte agent supprimée avec succès."}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur suppression alerte agent: {e}")
-        return jsonify({'message': "Erreur serveur."}), 500
+    return jsonify({
+        'price': price,
+        'duration_days': duration_days,
+        'free_limit': free_limit
+    }), 200
