@@ -1169,7 +1169,7 @@ def initiate_subscription_payment():
     try:
         from app.models import ServiceFee
         import requests
-        from app.config import Config
+        import os
         import json
         
         sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
@@ -1179,7 +1179,7 @@ def initiate_subscription_payment():
         amount = int(sub_fee.amount)
 
         headers = {
-            'Authorization': f'Bearer {Config.FEDAPAY_SECRET_KEY}',
+            'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}',
             'Content-Type': 'application/json'
         }
         
@@ -1201,7 +1201,7 @@ def initiate_subscription_payment():
         }
 
         resp = requests.post(
-            "https://sandbox-api.fedapay.com/v1/transactions" if Config.FEDAPAY_ENVIRONMENT == 'sandbox' else "https://api.fedapay.com/v1/transactions",
+            "https://sandbox-api.fedapay.com/v1/transactions" if os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox' else "https://api.fedapay.com/v1/transactions",
             json=payload,
             headers=headers,
             timeout=10
@@ -1218,7 +1218,7 @@ def initiate_subscription_payment():
             transaction_id = data.get('id')
             
             token_resp = requests.post(
-                f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}/token" if Config.FEDAPAY_ENVIRONMENT == 'sandbox' else f"https://api.fedapay.com/v1/transactions/{transaction_id}/token",
+                f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}/token" if os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox' else f"https://api.fedapay.com/v1/transactions/{transaction_id}/token",
                 headers=headers,
                 timeout=10
             )
@@ -1255,7 +1255,7 @@ def purchase_subscription():
     try:
         from app.models import ServiceFee, AppSetting
         import requests
-        from app.config import Config
+        import os
         from datetime import datetime, timedelta
         
         sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
@@ -1266,11 +1266,11 @@ def purchase_subscription():
         duration_days = int(duration_setting.setting_value) if duration_setting and duration_setting.setting_value.isdigit() else 30
         
         headers = {
-            'Authorization': f'Bearer {Config.FEDAPAY_SECRET_KEY}'
+            'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}'
         }
         
         resp = requests.get(
-            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}" if Config.FEDAPAY_ENVIRONMENT == 'sandbox' else f"https://api.fedapay.com/v1/transactions/{transaction_id}",
+            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}" if os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox' else f"https://api.fedapay.com/v1/transactions/{transaction_id}",
             headers=headers,
             timeout=10
         )
