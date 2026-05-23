@@ -1159,9 +1159,9 @@ def upload_image_for_agent():
 @agents_bp.route('/subscription-price', methods=['GET'])
 @jwt_required()
 def get_subscription_price():
-    from app.models import SystemPrice
-    price_config = SystemPrice.query.filter_by(name='property_subscription_price').first()
-    amount = float(price_config.amount) if price_config else 5000.0
+    from app.models import ServiceFee
+    sub_fee = ServiceFee.query.filter_by(service_key='property_subscription_purchase').first()
+    amount = float(sub_fee.amount) if sub_fee else 5000.0
     return jsonify({"price": amount}), 200
 
 
