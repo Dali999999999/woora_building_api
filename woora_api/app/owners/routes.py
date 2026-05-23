@@ -666,6 +666,8 @@ def initiate_subscription_payment():
             "description": f"Abonnement de publication Woora - {user.first_name}",
             "amount": amount,
             "currency": {"iso": "XOF"},
+            "callback_url": os.getenv("FEDAPAY_CALLBACK_URL", "https://woora-building-api.onrender.com/customers/payment/webhook/fedapay"),
+            "cancel_url": os.getenv("FEDAPAY_CANCEL_URL", "https://woora-building-api.onrender.com/customers/payment/cancel"),
             "customer": {
                 "firstname": user.first_name,
                 "lastname": user.last_name,
