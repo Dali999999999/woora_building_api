@@ -1298,3 +1298,21 @@ def get_subscription_price():
         'duration_days': duration_days,
         'free_limit': free_limit
     }), 200
+
+
+@agents_bp.route('/check-publication-limit', methods=['GET'])
+@jwt_required()
+def check_publication_limit_route():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    if not user or user.role != 'agent':
+        return jsonify({'message': "Accès non autorisé."}), 403
+
+    from app.utils.subscription_utils import check_publication_limit
+    can_publish = check_publication_limit(user, 'agent')
+    
+    if can_publish:
+        return jsonify({'can_publish': True}), 200
+    else:
+        return jsonify({'can_publish': False, 'message': "Vous avez atteint votre limite de publications."}), 403
+
