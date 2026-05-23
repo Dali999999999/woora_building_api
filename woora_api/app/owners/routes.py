@@ -668,9 +668,9 @@ def initiate_subscription_payment():
             "currency": {"iso": "XOF"},
             "callback_url": "woora://subscription_success",
             "customer": {
-                "email": user.email or f"user_{user.id}@woora.com",
-                "phone_number": user.phone_number,
-                "name": user.first_name
+                "firstname": user.first_name,
+                "lastname": user.last_name,
+                "email": user.email or f"user_{user.id}@woora.com"
             },
             "custom_metadata": {
                 "user_id": user.id,
