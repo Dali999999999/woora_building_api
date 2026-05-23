@@ -260,18 +260,36 @@ def purchase_visit_passes():
             return jsonify({'message': "Service d'achat de pass non configuré."}), 500
         
         price_per_pass = price_entry.amount # C'est un Decimal
+        import requests
+        import os
         
-        # 2. Vérifier la transaction auprès de Fedapay
-        transaction = feda.Transaction.retrieve(transaction_id)
+        headers = {
+            'Authorization': f'Bearer {os.getenv("FEDAPAY_SECRET_KEY")}'
+        }
         
-        if transaction.status != 'approved':
+        resp = requests.get(
+            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}" if os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox' else f"https://api.fedapay.com/v1/transactions/{transaction_id}",
+            headers=headers,
+            timeout=10
+        )
+        
+        if resp.status_code != 200:
+            return jsonify({'message': "Erreur lors de la vérification de la transaction."}), 400
+            
+        fedapay_data = resp.json()
+        transaction_data = fedapay_data.get('v1/transaction', fedapay_data)
+        
+        status = transaction_data.get('status')
+        amount = transaction_data.get('amount')
+
+        if status != 'approved':
             return jsonify({'message': "Le paiement n'a pas été approuvé."}), 400
 
         # 3. Étape de sécurité CRUCIALE : Valider le montant
         expected_amount = int(price_per_pass * quantity) # FedaPay utilise des entiers (centimes/plus petite unité)
         
-        if transaction.amount != expected_amount:
-            current_app.logger.warning(f"Alerte de sécurité: Montant invalide pour user {customer.id}. Attendu: {expected_amount}, Reçu: {transaction.amount}")
+        if amount != expected_amount:
+            current_app.logger.warning(f"Alerte de sécurité: Montant invalide pour user {customer.id}. Attendu: {expected_amount}, Reçu: {amount}")
             return jsonify({'message': "Montant de la transaction invalide."}), 400
 
         # 4. Créditer le compte de l'utilisateur
