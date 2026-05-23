@@ -785,7 +785,7 @@ def purchase_subscription():
         else:
             user.subscription_expires_at = now + timedelta(days=duration_days)
             
-        from app.extensions import db
+        from app import db
         db.session.commit()
         
         return jsonify({
