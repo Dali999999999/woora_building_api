@@ -666,7 +666,6 @@ def initiate_subscription_payment():
             "description": f"Abonnement de publication Woora - {user.first_name}",
             "amount": amount,
             "currency": {"iso": "XOF"},
-            "callback_url": "woora://subscription_success",
             "customer": {
                 "firstname": user.first_name,
                 "lastname": user.last_name,
