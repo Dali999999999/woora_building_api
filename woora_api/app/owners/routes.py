@@ -713,6 +713,20 @@ def initiate_subscription_payment():
             token_data = token_resp.json()
             checkout_url = token_data.get('url', token_data.get('token', token_url))
             
+            # --- AJOUT TRACE DE TRANSACTION ---
+            from app.models import Transaction
+            from decimal import Decimal
+            txn = Transaction(
+                user_id=user.id,
+                amount=Decimal(str(amount)),
+                type='payment',
+                description='En attente de validation (Abonnement)',
+                related_entity_id=str(transaction_id)
+            )
+            db.session.add(txn)
+            db.session.commit()
+            # ----------------------------------
+            
             return jsonify({
                 'checkout_url': checkout_url,
                 'transaction_id': transaction_id
@@ -784,6 +798,24 @@ def purchase_subscription():
             user.subscription_expires_at = user.subscription_expires_at + timedelta(days=duration_days)
         else:
             user.subscription_expires_at = now + timedelta(days=duration_days)
+            
+        # --- AJOUT VALIDATION TRANSACTION ---
+        from app.models import Transaction
+        from decimal import Decimal
+        txn = Transaction.query.filter_by(related_entity_id=str(transaction_id)).first()
+        if txn:
+            txn.description = f"Abonnement premium de {duration_days} jours activé avec succès."
+        else:
+            # Fallback si jamais la transaction n'avait pas été créée à l'initiation
+            txn = Transaction(
+                user_id=user.id,
+                amount=Decimal(str(amount)),
+                type='payment',
+                description=f"Abonnement premium de {duration_days} jours activé avec succès (hors initiation).",
+                related_entity_id=str(transaction_id)
+            )
+            db.session.add(txn)
+        # ------------------------------------
             
         from app import db
         db.session.commit()

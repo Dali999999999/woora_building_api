@@ -807,7 +807,8 @@ def request_withdrawal():
     # --- DÉBUT DE L'INTERACTION AVEC FEDAPAY ---
     
     FEDAPAY_API_KEY = os.environ.get('FEDAPAY_SECRET_KEY')
-    FEDAPAY_API_URL = "https://sandbox-api.fedapay.com/v1/payouts"
+    is_sandbox = os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox'
+    FEDAPAY_API_URL = "https://sandbox-api.fedapay.com/v1/payouts" if is_sandbox else "https://api.fedapay.com/v1/payouts"
 
     headers = {
         'Authorization': f'Bearer {FEDAPAY_API_KEY}',
@@ -834,30 +835,36 @@ def request_withdrawal():
         response_create = requests.post(FEDAPAY_API_URL, headers=headers, json=payout_data)
         response_create.raise_for_status() # Lève une exception pour les erreurs HTTP (4xx ou 5xx)
         payout_response_data = response_create.json()
-        payout_id = payout_response_data['v1/payout']['id']
+        payout_id = payout_response_data.get('v1/payout', {}).get('id') or payout_response_data.get('id')
+
+        if not payout_id:
+            raise Exception("ID de virement manquant de FedaPay")
 
         # Étape 2 : Lancer le Payout immédiatement
         start_url = f"{FEDAPAY_API_URL}/start"
-        start_data = { "payouts": [{ "id": payout_id }] }
+        start_data = { "payouts": [{ "id": payout_id, "send_now": True }] }
         response_start = requests.put(start_url, headers=headers, json=start_data)
         response_start.raise_for_status()
 
-        # Étape 3 : Enregistrer la transaction dans notre BDD
-        # L'argent est maintenant "bloqué" en attendant la confirmation de FedaPay
-        # On ne décrémente le solde que lorsque le webhook confirme le statut 'sent'
+        # Étape 3 : Débiter immédiatement le solde du portefeuille de l'agent
+        # et enregistrer la transaction validée négative (retrait) dans notre BDD
+        from decimal import Decimal
+        agent.wallet_balance = Decimal(str(agent.wallet_balance or 0.0)) - Decimal(str(amount_int))
+        
         new_transaction = Transaction(
             user_id=agent.id,
-            amount=Decimal(str(amount_int)), # On stocke en Decimal
+            amount=Decimal(str(-amount_int)), # Montant négatif car c'est un virement sortant
             type='withdrawal',
-            description=f"Demande de virement vers {phone_number} via {mode}.",
-            # On pourrait ajouter une colonne 'status' et 'external_id' à la table Transaction
-            # status='pending', 
-            # external_transaction_id=payout_id 
+            description=f"Retrait automatique de {amount_int} XOF vers {phone_number} via {mode} validé et débité.",
+            related_entity_id=str(payout_id)
         )
         db.session.add(new_transaction)
         db.session.commit()
 
-        return jsonify({'message': f"Votre demande de virement de {amount_int} XOF a été initiée."}), 200
+        return jsonify({
+            'message': f"Votre virement automatique de {amount_int} XOF a été traité avec succès et débité.",
+            'new_balance': float(agent.wallet_balance)
+        }), 200
 
     except requests.exceptions.RequestException as e:
         # Erreurs de communication avec FedaPay
@@ -1234,6 +1241,20 @@ def initiate_subscription_payment():
             token_data = token_resp.json()
             checkout_url = token_data.get('url', token_data.get('token', token_url))
             
+            # --- AJOUT TRACE DE TRANSACTION ---
+            from app.models import Transaction
+            from decimal import Decimal
+            txn = Transaction(
+                user_id=user.id,
+                amount=Decimal(str(amount)),
+                type='payment',
+                description='En attente de validation (Abonnement)',
+                related_entity_id=str(transaction_id)
+            )
+            db.session.add(txn)
+            db.session.commit()
+            # ----------------------------------
+            
             return jsonify({
                 'checkout_url': checkout_url,
                 'transaction_id': transaction_id
@@ -1305,6 +1326,24 @@ def purchase_subscription():
             user.subscription_expires_at = user.subscription_expires_at + timedelta(days=duration_days)
         else:
             user.subscription_expires_at = now + timedelta(days=duration_days)
+            
+        # --- AJOUT VALIDATION TRANSACTION ---
+        from app.models import Transaction
+        from decimal import Decimal
+        txn = Transaction.query.filter_by(related_entity_id=str(transaction_id)).first()
+        if txn:
+            txn.description = f"Abonnement premium de {duration_days} jours activé avec succès."
+        else:
+            # Fallback si jamais la transaction n'avait pas été créée à l'initiation
+            txn = Transaction(
+                user_id=user.id,
+                amount=Decimal(str(amount)),
+                type='payment',
+                description=f"Abonnement premium de {duration_days} jours activé avec succès (hors initiation).",
+                related_entity_id=str(transaction_id)
+            )
+            db.session.add(txn)
+        # ------------------------------------
             
         from app import db
         db.session.commit()

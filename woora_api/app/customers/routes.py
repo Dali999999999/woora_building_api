@@ -50,8 +50,12 @@ def initiate_visit_pass_payment():
         print(f"🔍 Envoi requête FedaPay avec payload: {payload}")
         print(f"🔍 Headers: {headers}")
         
+        # Déterminer si on est en mode sandbox ou production
+        is_sandbox = os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox'
+        fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
+        
         resp = requests.post(
-            "https://sandbox-api.fedapay.com/v1/transactions",
+            f"{fedapay_base_url}/transactions",
             json=payload,
             headers=headers,
             timeout=30  # Ajout d'un timeout
@@ -160,8 +164,12 @@ def verify_transaction_status(transaction_id):
     try:
         print(f"🔍 Vérification manuelle transaction {transaction_id}")
         
+        # Déterminer si on est en mode sandbox ou production
+        is_sandbox = os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox'
+        fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
+        
         resp = requests.get(
-            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}",
+            f"{fedapay_base_url}/transactions/{transaction_id}",
             headers=headers,
             timeout=30
         )
@@ -563,8 +571,12 @@ def verify_and_process_payment(transaction_id):
     try:
         print(f"🔍 Interrogation FedaPay pour transaction {transaction_id}")
         
+        # Déterminer si on est en mode sandbox ou production
+        is_sandbox = os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox'
+        fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
+        
         resp = requests.get(
-            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}",
+            f"{fedapay_base_url}/transactions/{transaction_id}",
             headers=headers,
             timeout=30
         )
@@ -686,8 +698,12 @@ def check_payment_status_only(transaction_id):
     }
     
     try:
+        # Déterminer si on est en mode sandbox ou production
+        is_sandbox = os.getenv("FEDAPAY_ENVIRONMENT", "sandbox") == 'sandbox'
+        fedapay_base_url = "https://sandbox-api.fedapay.com/v1" if is_sandbox else "https://api.fedapay.com/v1"
+        
         resp = requests.get(
-            f"https://sandbox-api.fedapay.com/v1/transactions/{transaction_id}",
+            f"{fedapay_base_url}/transactions/{transaction_id}",
             headers=headers,
             timeout=30
         )
