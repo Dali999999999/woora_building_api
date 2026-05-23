@@ -635,6 +635,14 @@ def upload_image_for_owner():
     else:
         return jsonify({'error': "Échec de l'upload vers Cloudinary"}), 500
 
+@owners_bp.route('/subscription-price', methods=['GET'])
+@jwt_required()
+def get_subscription_price():
+    from app.models import SystemPrice
+    price_config = SystemPrice.query.filter_by(name='property_subscription_price').first()
+    amount = float(price_config.amount) if price_config else 5000.0
+    return jsonify({"price": amount}), 200
+
 
 @owners_bp.route('/initiate-subscription-payment', methods=['POST'])
 @jwt_required()
