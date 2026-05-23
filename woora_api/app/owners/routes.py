@@ -663,14 +663,14 @@ def initiate_subscription_payment():
         }
         
         payload = {
-            "description": f"Abonnement de publication Woora - {user.name}",
+            "description": f"Abonnement de publication Woora - {user.first_name}",
             "amount": amount,
             "currency": {"iso": "XOF"},
             "callback_url": "woora://subscription_success",
             "customer": {
                 "email": user.email or f"user_{user.id}@woora.com",
                 "phone_number": user.phone,
-                "name": user.name or user.first_name
+                "name": user.first_name
             },
             "custom_metadata": {
                 "user_id": user.id,
