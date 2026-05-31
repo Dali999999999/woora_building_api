@@ -847,89 +847,7 @@ def update_publication_settings():
     return jsonify({'message': 'Paramètres de publication mis à jour.'}), 200
 
 # ------------- VISITE REQUESTS -------------
-@admin_bp.route('/visit_requests', methods=['GET'])
-def get_visit_requests():
-    status_filter = request.args.get('status')
-    query = VisitRequest.query
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-    
-    # Tri par date de visite (ascendant = plus proche en premier)
-    query = query.order_by(VisitRequest.requested_datetime.asc())
-    
-    result = []
-    for req in query.all():
-        customer = User.query.get(req.customer_id)
-        prop = Property.query.get(req.property_id)
-        result.append({
-            'id': req.id,
-            'customer_name': f'{customer.first_name} {customer.last_name}' if customer else 'N/A',
-            'customer_email': customer.email if customer else 'N/A',
-            'property_title': prop.title if prop else 'N/A',
-            'requested_datetime': req.requested_datetime.isoformat(),
-            'status': req.status,
-            'message': req.message,
-            'created_at': req.created_at.isoformat()
-        })
-    return jsonify(result), 200
-
-@admin_bp.route('/visit_requests/<int:request_id>/confirm', methods=['PUT'])
-def confirm_visit_request(request_id):
-    vr = VisitRequest.query.get_or_404(request_id)
-    if vr.status != 'owner_accepted':
-        return jsonify({'message': 'Cette demande ne peut pas être confirmée. Le propriétaire doit d’abord l’accepter.'}), 400
-    vr.status = 'accepted'
-    vr.customer_has_unread_update = True
-    try:
-        db.session.commit()
-        # Notifier le CLIENT que la visite est définitivement confirmée
-        customer = User.query.get(vr.customer_id)
-        prop = Property.query.get(vr.property_id)
-        if customer and prop:
-            send_owner_acceptance_notification(
-                customer.email,
-                prop.title,
-                vr.requested_datetime.strftime('%d/%m/%Y à %Hh%M')
-            )
-        return jsonify({'message': 'Visite confirmée. Le client a été notifié.'}), 200
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur confirmation visite admin: {e}")
-        return jsonify({'message': 'Erreur.'}), 500
-
-@admin_bp.route('/visit_requests/<int:request_id>/reject', methods=['PUT'])
-def reject_visit_request_by_admin(request_id):
-    vr = VisitRequest.query.get_or_404(request_id)
-    
-    # L'admin peut refuser depuis 'pending', 'owner_accepted' ou 'accepted'
-    if vr.status not in ['pending', 'owner_accepted', 'accepted']:
-        return jsonify({'message': 'Impossible d\'annuler une visite déjà effectuée ou rejetée.'}), 400
-        
-    vr.status = 'rejected'
-    vr.customer_has_unread_update = True
-    msg = request.get_json().get('message', 'Annulation par l\'administrateur.')
-    
-    try:
-        # REMBOURSEMENT AUTOMATIQUE DU PASS
-        if vr.customer_id:
-            customer_to_refund = User.query.with_for_update().get(vr.customer_id)
-            if customer_to_refund:
-                customer_to_refund.visit_passes += 1
-                current_app.logger.info(f"[ADMIN] Remboursement de 1 pass au client {customer_to_refund.id} suite au rejet/annulation de la visite {vr.id}")
-
-        db.session.commit()
-        
-        # Notification au client
-        customer = User.query.get(vr.customer_id)
-        prop = Property.query.get(vr.property_id)
-        if customer and prop:
-            send_admin_rejection_notification(customer.email, prop.title, msg)
-            
-        return jsonify({'message': 'Visite annulée/rejetée avec succès.'}), 200
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erreur annulation visite admin: {e}")
-        return jsonify({'message': 'Erreur lors de l\'annulation.'}), 500
+# ------------- VISITE REQUESTS (OBSOLETE DUPLICATES REMOVED) -------------
 
 # ------------- COMMISSION AGENT -------------
 @admin_bp.route('/settings/agent_commission', methods=['GET'])
@@ -1486,6 +1404,19 @@ def update_property_by_admin(property_id):
             property.longitude = float(val) if val and str(val).lower() != 'null' else None
         except (ValueError, TypeError):
              return jsonify({'message': 'longitude invalide.'}), 400
+
+    if 'property_type_id' in attributes_data:
+        try:
+            pt_val = attributes_data['property_type_id']
+            if pt_val is not None:
+                pt_id = int(pt_val)
+                property_type = PropertyType.query.get(pt_id)
+                if property_type:
+                    property.property_type_id = pt_id
+                else:
+                    return jsonify({'message': "Type de propriété non trouvé."}), 400
+        except (ValueError, TypeError):
+            return jsonify({'message': "property_type_id doit être un entier valide."}), 400
 
     # 2. JSON attributes column update removed (Phase 2 - EAV Architecture Migration)
 

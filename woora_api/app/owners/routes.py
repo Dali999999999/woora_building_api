@@ -298,8 +298,8 @@ def update_owner_property(property_id):
     else:
         # Pour Owner et Agent
         # A. Vérifier qu'ils sont bien liés au bien
-        is_owner = (property.owner_id == current_user_id)
-        is_agent = (property.agent_id == current_user_id)
+        is_owner = (property.owner_id == int(current_user_id)) if property.owner_id is not None else False
+        is_agent = (property.agent_id == int(current_user_id)) if property.agent_id is not None else False
         
         if not is_owner and not is_agent:
              return jsonify({'message': "Accès non autorisé. Vous n'êtes pas le propriétaire ou l'agent de ce bien."}), 403
@@ -369,6 +369,19 @@ def update_owner_property(property_id):
                 property.longitude = float(lon_val) if lon_val and str(lon_val).lower() != 'null' else None
             except (ValueError, TypeError):
                 return jsonify({'message': 'longitude doit être un nombre décimal valide.'}), 400
+
+        if 'property_type_id' in attributes_data:
+            try:
+                pt_val = attributes_data['property_type_id']
+                if pt_val is not None:
+                    pt_id = int(pt_val)
+                    property_type = PropertyType.query.get(pt_id)
+                    if property_type:
+                        property.property_type_id = pt_id
+                    else:
+                        return jsonify({'message': "Type de propriété non trouvé."}), 400
+            except (ValueError, TypeError):
+                return jsonify({'message': "property_type_id doit être un entier valide."}), 400
 
         # JSON attributes column update removed (Phase 2 - EAV Architecture Migration)
 
@@ -447,8 +460,7 @@ def get_owner_visit_requests():
     
     from sqlalchemy import or_
     visit_requests = db.session.query(VisitRequest).join(Property).filter(
-        or_(Property.owner_id == current_user_id, Property.agent_id == current_user_id),
-        VisitRequest.status == 'pending'  # Le proprio voit les demandes en attente de SON action
+        or_(Property.owner_id == current_user_id, Property.agent_id == current_user_id)
     ).order_by(VisitRequest.created_at.desc()).all()
 
     result = []

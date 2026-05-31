@@ -428,7 +428,7 @@ class VisitRequest(db.Model):
     property_id = db.Column(db.Integer, db.ForeignKey('Properties.id', ondelete='CASCADE'), nullable=False)
     referral_id = db.Column(db.Integer, db.ForeignKey('Referrals.id', ondelete='SET NULL'))
     requested_datetime = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.Enum('pending', 'confirmed', 'accepted', 'rejected', 'completed'), nullable=False, default='pending')
+    status = db.Column(db.Enum('pending', 'owner_accepted', 'confirmed', 'accepted', 'rejected', 'completed'), nullable=False, default='pending')
     message = db.Column(db.Text)
     customer_has_unread_update = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

@@ -230,8 +230,8 @@ def get_property_details_for_seeker(property_id):
     # RÈGLE DE VISIBILITÉ :
     # Si le bien n'est pas encore validé, seuls l'owner, l'agent créateur ou l'admin peuvent le voir.
     if not property_obj.is_validated:
-        is_owner = (property_obj.owner_id == user_id)
-        is_agent = (property_obj.agent_id == user_id)
+        is_owner = (property_obj.owner_id == int(user_id)) if property_obj.owner_id is not None and user_id is not None else False
+        is_agent = (property_obj.agent_id == int(user_id)) if property_obj.agent_id is not None and user_id is not None else False
         
         # On vérifie le rôle pour l'admin car user_id est juste l'ID, pas l'objet complet ici
         from app.models import User
@@ -795,3 +795,33 @@ def get_my_visit_requests():
     except Exception as e:
         current_app.logger.error(f"Erreur lors de la récupération des demandes de visite: {e}", exc_info=True)
         return jsonify({'error': 'Erreur interne du serveur.'}), 500
+
+
+@seekers_bp.route('/visit_requests/<int:request_id>/cancel', methods=['PUT', 'POST'])
+@jwt_required()
+def cancel_visit_request(request_id):
+    """
+    Le client (seeker) annule sa demande de visite.
+    """
+    try:
+        user_id = get_jwt_identity()
+        visit_request = VisitRequest.query.filter_by(id=request_id, customer_id=user_id).first()
+        
+        if not visit_request:
+            return jsonify({'error': "Demande de visite non trouvée ou non autorisée."}), 404
+            
+        if visit_request.status in ['completed', 'rejected']:
+            return jsonify({'error': f"Cette demande de visite ne peut plus être annulée car elle est déjà {visit_request.status}."}), 400
+            
+        visit_request.status = 'rejected'
+        visit_request.message = "Visite annulée par le client."
+        
+        db.session.commit()
+        
+        return jsonify({'message': "La demande de visite a été annulée avec succès."}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur lors de l'annulation de la demande de visite par le client: {e}", exc_info=True)
+        return jsonify({'error': 'Erreur interne du serveur.'}), 500
+
