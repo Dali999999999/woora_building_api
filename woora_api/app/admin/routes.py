@@ -272,9 +272,12 @@ def suspend_user(user_id):
     user = User.query.get_or_404(user_id)
     data = request.get_json() or {}
     reason = data.get('reason', 'Non-respect des règles.')
+    attachment_url = data.get('attachment_url')
 
     user.is_suspended = True
     user.suspension_reason = reason
+    user.banned_by_admin_id = admin.id
+    user.suspension_attachment_url = attachment_url
     db.session.commit()
 
     return jsonify({'message': f'Utilisateur {user.email} suspendu.', 'is_suspended': True}), 200
@@ -290,6 +293,8 @@ def unsuspend_user(user_id):
     user = User.query.get_or_404(user_id)
     user.is_suspended = False
     user.suspension_reason = None
+    user.banned_by_admin_id = None
+    user.suspension_attachment_url = None
     db.session.commit()
 
     return jsonify({'message': f'Suspension levée pour {user.email}.', 'is_suspended': False}), 200
@@ -421,15 +426,17 @@ def get_properties():
     # 2. Base Query (Exclude soft-deleted)
     query = Property.query.filter(Property.deleted_at == None).options(selectinload(Property.owner))
 
-    # 3. Apply Search (Keyword in title, description, city, address)
+    # 3. Apply Search (Keyword in title, description, city, address) - Tâche 20
     if search_query:
-        search_pattern = f"%{search_query}%"
-        query = query.filter(db.or_(
-            Property.title.ilike(search_pattern),
-            Property.description.ilike(search_pattern),
-            Property.city.ilike(search_pattern),
-            Property.address.ilike(search_pattern)
-        ))
+        words = search_query.split()
+        for word in words:
+            pattern = f"%{word}%"
+            query = query.filter(db.or_(
+                Property.title.ilike(pattern),
+                Property.description.ilike(pattern),
+                Property.city.ilike(pattern),
+                Property.address.ilike(pattern)
+            ))
 
     # 4. Apply Filters
     if property_type_id:
@@ -979,20 +986,7 @@ def get_eligible_buyers_for_property(property_id):
 # @admin_required # Et accessible uniquement par les admins
 # --- GESTION DES VISITES EFFECTUÉES ET TRANSACTION ---
 
-@admin_bp.route('/visit_requests/<int:visit_id>/complete', methods=['PUT'])
-# @admin_required
-def mark_visit_as_completed(visit_id):
-    """
-    Marque une visite comme 'effectuée' (completed).
-    Cela permet ensuite de sélectionner ce client comme acquéreur.
-    """
-    visit = VisitRequest.query.get_or_404(visit_id)
-    if visit.status != 'accepted':
-        return jsonify({'message': "Seule une visite 'acceptée' peut être marquée comme effectuée."}), 400
-    
-    visit.status = 'completed'
-    db.session.commit()
-    return jsonify({'message': "Visite marquée comme effectuée.", 'visit': visit.to_dict()}), 200
+# (La route de complétion de visite est définie de manière sécurisée avec débit de pass à la fin du fichier : mark_visit_completed_admin)
 
 @admin_bp.route('/properties/<int:property_id>/eligible_buyers', methods=['GET'])
 # @admin_required
@@ -1716,6 +1710,7 @@ def mark_visit_completed_admin(request_id):
             return jsonify({'error': "Seules les visites acceptées peuvent être marquées comme effectuées."}), 400
 
         # DÉDUCTION DU PASS ICI (Règle métier cliente)
+        customer = None
         if visit_request.customer_id:
             customer = User.query.with_for_update().get(visit_request.customer_id)
             if customer:
@@ -1729,6 +1724,17 @@ def mark_visit_completed_admin(request_id):
         visit_request.status = 'completed'
         visit_request.customer_has_unread_update = True
         db.session.commit()
+        
+        # Envoyer l'email de visite effectuée (Tâche 3)
+        if customer:
+            try:
+                from app.utils.email_utils import send_visit_completed_email
+                prop = Property.query.get(visit_request.property_id)
+                prop_title = prop.title if prop else "un bien"
+                customer_name = f"{customer.first_name} {customer.last_name}" if customer.first_name else customer.email
+                send_visit_completed_email(customer.email, customer_name, prop_title)
+            except Exception as email_err:
+                current_app.logger.error(f"Erreur lors de l'envoi de l'email de visite effectuée: {email_err}")
         
         return jsonify({'message': 'Visite marquée comme effectuée. Le pass a été déduit.'}), 200
         

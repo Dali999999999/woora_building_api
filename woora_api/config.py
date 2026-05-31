@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 
 # Charger .env explicitement ici aussi (sécurité si Config est importé directement)
@@ -33,6 +34,8 @@ class Config:
     JWT_COOKIE_CSRF_PROTECT = True  # Security: Enable CSRF protection
     JWT_ACCESS_COOKIE_NAME = 'access_token_cookie'
     JWT_REFRESH_COOKIE_NAME = 'refresh_token_cookie'
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
     # Configuration pour Flask-Mail (envoi d'e-mails de vérification & notifications)
     MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.gmail.com'

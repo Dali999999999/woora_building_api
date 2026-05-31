@@ -539,3 +539,36 @@ def send_visit_request_confirmation_to_customer(customer_email, customer_name, p
     except Exception as e:
         current_app.logger.error(f"Erreur envoi email confirmation client: {e}", exc_info=True)
         return False
+
+
+def send_visit_completed_email(customer_email, customer_name, property_title):
+    """
+    Envoie un email de remerciement et de félicitations au client après une visite effectuée.
+    """
+    subject = f'Visite effectuée avec succès – {property_title}'
+
+    body_html = f"""
+        <p>Bonjour {customer_name},</p>
+        <p>Nous espérons que votre visite pour le bien <strong>"{property_title}"</strong> s'est bien déroulée.</p>
+
+        <p>Votre demande de visite est maintenant marquée comme <strong style="color:#27AE60;">Effectuée</strong> dans votre espace personnel <strong>WOORA Building</strong>.</p>
+        
+        <p>N'hésitez pas à nous faire part de vos commentaires et à continuer de parcourir nos offres pour trouver le bien de vos rêves.</p>
+
+        <p>L'équipe WOORA Building reste à votre entière disposition.</p>
+    """
+
+    msg = Message(
+        subject,
+        sender=current_app.config['MAIL_DEFAULT_SENDER'],
+        recipients=[customer_email],
+        html=get_email_template("Visite effectuée", body_html)
+    )
+
+    try:
+        mail.send(msg)
+        current_app.logger.info(f"Email de remerciement de visite effectuée envoyé à {customer_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erreur envoi email visite effectuée: {e}", exc_info=True)
+        return False

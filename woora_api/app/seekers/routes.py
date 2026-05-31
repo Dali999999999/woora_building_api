@@ -60,16 +60,42 @@ def get_all_properties_for_seeker():
     # --- 2. Filtres "Durs" (Exclusion) ---
     # Ces filtres éliminent les résultats qui ne correspondent PAS.
     
-    # Recherche Textuelle
+    # Recherche Textuelle (Tâche 20 : Double mots-clés)
     search_query = request.args.get('search', '').strip()
     if search_query:
-        search_pattern = f"%{search_query}%"
-        base_query = base_query.filter(or_(
-            Property.title.ilike(search_pattern),
-            Property.city.ilike(search_pattern),
-            Property.address.ilike(search_pattern),
-            Property.description.ilike(search_pattern)
-        ))
+        words = search_query.split()
+        for word in words:
+            pattern = f"%{word}%"
+            base_query = base_query.filter(or_(
+                Property.title.ilike(pattern),
+                Property.city.ilike(pattern),
+                Property.address.ilike(pattern),
+                Property.description.ilike(pattern)
+            ))
+
+    # Filtrage par rayon géographique (Tâche 23 : GPS / Rayon de distance)
+    try:
+        lat_param = request.args.get('latitude')
+        lng_param = request.args.get('longitude')
+        radius_param = request.args.get('radius') # en kilomètres
+        
+        if lat_param and lng_param and radius_param:
+            lat_val = float(lat_param)
+            lng_val = float(lng_param)
+            radius_val = float(radius_param)
+            
+            # Formule de Haversine en SQL Alchemy
+            from sqlalchemy import func
+            distance = 6371 * func.acos(
+                func.cos(func.radians(lat_val)) * 
+                func.cos(func.radians(Property.latitude)) * 
+                func.cos(func.radians(Property.longitude) - func.radians(lng_val)) + 
+                func.sin(func.radians(lat_val)) * 
+                func.sin(func.radians(Property.latitude))
+            )
+            base_query = base_query.filter(distance <= radius_val)
+    except Exception as geo_err:
+        current_app.logger.error(f"Erreur lors du filtrage géographique par rayon: {geo_err}")
 
     # Type de Bien
     try:
@@ -152,8 +178,33 @@ def get_all_properties_for_seeker():
     
     properties = pagination.items
 
+    lat_param = request.args.get('latitude')
+    lng_param = request.args.get('longitude')
+    lat_val, lng_val = None, None
+    if lat_param and lng_param:
+        try:
+            lat_val = float(lat_param)
+            lng_val = float(lng_param)
+        except ValueError:
+            pass
+
+    properties_list = []
+    for p in properties:
+        p_dict = p.to_dict()
+        if lat_val is not None and lng_val is not None and p.latitude is not None and p.longitude is not None:
+            import math
+            lat1, lon1 = math.radians(lat_val), math.radians(lng_val)
+            lat2, lon2 = math.radians(float(p.latitude)), math.radians(float(p.longitude))
+            dlon = lon2 - lon1
+            dlat = lat2 - lat1
+            a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+            c = 2 * math.asin(math.sqrt(a))
+            r = 6371 # Radius of earth in kilometers
+            p_dict['distance_km'] = round(c * r, 2)
+        properties_list.append(p_dict)
+
     return jsonify({
-        'properties': [p.to_dict() for p in properties],
+        'properties': properties_list,
         'total': pagination.total,
         'pages': pagination.pages,
         'current_page': page

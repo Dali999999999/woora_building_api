@@ -58,15 +58,44 @@ def get_all_properties_for_agent():
         base_query = base_query.filter(Property.status.in_(['for_sale', 'for_rent']))
 
     # --- 2. Filtres "Durs" (Exclusion) ---
+    # Recherche Textuelle (Tâche 20 : Double mots-clés)
     search_query = request.args.get('search', '').strip()
     if search_query:
-        search_pattern = f"%{search_query}%"
-        base_query = base_query.filter(or_(
-            Property.title.ilike(search_pattern),
-            Property.city.ilike(search_pattern),
-            Property.address.ilike(search_pattern)
-        ))
+        words = search_query.split()
+        for word in words:
+            pattern = f"%{word}%"
+            base_query = base_query.filter(or_(
+                Property.title.ilike(pattern),
+                Property.city.ilike(pattern),
+                Property.address.ilike(pattern),
+                Property.description.ilike(pattern)
+            ))
 
+    # Filtrage par rayon géographique (Tâche 23 : GPS / Rayon de distance)
+    try:
+        lat_param = request.args.get('latitude')
+        lng_param = request.args.get('longitude')
+        radius_param = request.args.get('radius') # en kilomètres
+        
+        if lat_param and lng_param and radius_param:
+            lat_val = float(lat_param)
+            lng_val = float(lng_param)
+            radius_val = float(radius_param)
+            
+            # Formule de Haversine en SQL Alchemy
+            from sqlalchemy import func
+            distance = 6371 * func.acos(
+                func.cos(func.radians(lat_val)) * 
+                func.cos(func.radians(Property.latitude)) * 
+                func.cos(func.radians(Property.longitude) - func.radians(lng_val)) + 
+                func.sin(func.radians(lat_val)) * 
+                func.sin(func.radians(Property.latitude))
+            )
+            base_query = base_query.filter(distance <= radius_val)
+    except Exception as geo_err:
+        current_app.logger.error(f"Erreur lors du filtrage géographique par rayon: {geo_err}")
+
+    # Type de Bien
     try:
         property_type_id = request.args.get('property_type_id')
         if property_type_id:
@@ -74,6 +103,7 @@ def get_all_properties_for_agent():
     except (ValueError, TypeError):
         pass
 
+    # Prix Min / Max
     try:
         min_price = request.args.get('min_price')
         if min_price:
@@ -137,8 +167,33 @@ def get_all_properties_for_agent():
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     properties = pagination.items
     
+    lat_param = request.args.get('latitude')
+    lng_param = request.args.get('longitude')
+    lat_val, lng_val = None, None
+    if lat_param and lng_param:
+        try:
+            lat_val = float(lat_param)
+            lng_val = float(lng_param)
+        except ValueError:
+            pass
+
+    properties_list = []
+    for p in properties:
+        p_dict = p.to_dict()
+        if lat_val is not None and lng_val is not None and p.latitude is not None and p.longitude is not None:
+            import math
+            lat1, lon1 = math.radians(lat_val), math.radians(lng_val)
+            lat2, lon2 = math.radians(float(p.latitude)), math.radians(float(p.longitude))
+            dlon = lon2 - lon1
+            dlat = lat2 - lat1
+            a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+            c = 2 * math.asin(math.sqrt(a))
+            r = 6371 # Radius of earth in kilometers
+            p_dict['distance_km'] = round(c * r, 2)
+        properties_list.append(p_dict)
+
     return jsonify({
-        'properties': [p.to_dict() for p in properties],
+        'properties': properties_list,
         'total': pagination.total,
         'pages': pagination.pages,
         'current_page': page
@@ -224,7 +279,7 @@ def create_or_get_referral_code(property_id):
 def get_agent_referrals_with_details():
     """
     Récupère tous les codes de parrainage de l'agent connecté, avec les détails
-    du bien associé et la liste des clients ayant utilisé chaque code.
+    du bien associé et la liste des clients ayant utilisé chaque code, filtré par statut.
     """
     current_user_id = get_jwt_identity()
     agent = User.query.get(current_user_id)
@@ -232,20 +287,29 @@ def get_agent_referrals_with_details():
     if not agent or agent.role != 'agent':
         return jsonify({'message': "Accès non autorisé."}), 403
 
+    status_filter = request.args.get('status')
+
     # On récupère tous les parrainages de l'agent
-    referrals = Referral.query.filter_by(agent_id=current_user_id).all()
+    query = Referral.query.filter_by(agent_id=current_user_id)
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    referrals = query.all()
     
     response_data = []
     for referral in referrals:
         # Pour chaque parrainage, on construit un dictionnaire détaillé
         
-        # On récupère les clients qui ont utilisé ce code
+        # On récupère les clients qui ont utilisé ce code avec les détails de la visite (Tâche 5)
         customers_who_used_code = []
         for visit in referral.visit_requests: # Grâce à la relation ajoutée dans le modèle
             customer = visit.customer
             if customer:
                 customers_who_used_code.append({
-                    'full_name': f"{customer.first_name or ''} {customer.last_name or ''}".strip()
+                    'full_name': f"{customer.first_name or ''} {customer.last_name or ''}".strip(),
+                    'visit_id': visit.id,
+                    'requested_datetime': visit.requested_datetime.isoformat() if visit.requested_datetime else None,
+                    'status': visit.status,
+                    'message': visit.message
                 })
 
         response_data.append({
@@ -253,6 +317,7 @@ def get_agent_referrals_with_details():
             'referral_code': referral.referral_code,
             'property_id': referral.property_id,
             'property_title': referral.property.title if referral.property else "Bien supprimé",
+            'status': referral.status,
             'customers': customers_who_used_code
         })
 
@@ -755,7 +820,7 @@ def get_payout_history():
         )
         
         return jsonify({
-            'payouts': [payout.to_dict() for payout in payouts.items],
+                'payouts': [payout.to_dict() for payout in payouts.items],
             'pagination': {
                 'current_page': payouts.page,
                 'pages': payouts.pages,
@@ -774,6 +839,7 @@ def get_payout_history():
 def request_withdrawal():
     """
     Initie une demande de virement (Payout) pour l'agent connecté.
+    Sécurisée avec statut de transition et débit différé par Webhook (Tâche 8).
     """
     current_user_id = get_jwt_identity()
     # ✅ VERROUILLAGE PESSIMISTE
@@ -781,6 +847,14 @@ def request_withdrawal():
     
     if not agent or agent.role != 'agent':
         return jsonify({'message': "Accès non autorisé."}), 403
+
+    # 1. Vérifier si une demande de retrait est déjà en cours pour éviter la double dépense
+    existing_payout = PayoutRequest.query.filter(
+        PayoutRequest.agent_id == current_user_id,
+        PayoutRequest.status.in_(['pending', 'processing'])
+    ).first()
+    if existing_payout:
+        return jsonify({'message': "Une demande de retrait est déjà en cours de traitement."}), 400
 
     data = request.get_json()
     if not data:
@@ -804,6 +878,18 @@ def request_withdrawal():
     except (ValueError, TypeError):
         return jsonify({'message': "Le montant doit être un nombre entier valide."}), 400
         
+    # Créer l'enregistrement PayoutRequest en état 'pending' (Tâche 8)
+    from decimal import Decimal
+    payout_request = PayoutRequest(
+        agent_id=agent.id,
+        requested_amount=Decimal(str(amount_int)),
+        status='pending',
+        payment_method=mode,
+        phone_number=phone_number
+    )
+    db.session.add(payout_request)
+    db.session.commit()
+
     # --- DÉBUT DE L'INTERACTION AVEC FEDAPAY ---
     
     FEDAPAY_API_KEY = os.environ.get('FEDAPAY_SECRET_KEY')
@@ -846,35 +932,37 @@ def request_withdrawal():
         response_start = requests.put(start_url, headers=headers, json=start_data)
         response_start.raise_for_status()
 
-        # Étape 3 : Débiter immédiatement le solde du portefeuille de l'agent
-        # et enregistrer la transaction validée négative (retrait) dans notre BDD
-        from decimal import Decimal
-        agent.wallet_balance = Decimal(str(agent.wallet_balance or 0.0)) - Decimal(str(amount_int))
-        
-        new_transaction = Transaction(
-            user_id=agent.id,
-            amount=Decimal(str(-amount_int)), # Montant négatif car c'est un virement sortant
-            type='withdrawal',
-            description=f"Retrait automatique de {amount_int} XOF vers {phone_number} via {mode} validé et débité.",
-            related_entity_id=str(payout_id)
-        )
-        db.session.add(new_transaction)
+        # Étape 3 : Mettre à jour la demande en état 'processing' et stocker le payout ID
+        payout_request.status = 'processing'
+        payout_request.fedapay_transaction_id = str(payout_id)
+        payout_request.processed_at = datetime.utcnow()
         db.session.commit()
 
+        # Le solde n'est pas débité tout de suite. Il le sera par le webhook sur payout.approved !
         return jsonify({
-            'message': f"Votre virement automatique de {amount_int} XOF a été traité avec succès et débité.",
+            'message': f"Votre demande de retrait de {amount_int} XOF a été initiée et est en cours de traitement.",
             'new_balance': float(agent.wallet_balance)
         }), 200
 
     except requests.exceptions.RequestException as e:
         # Erreurs de communication avec FedaPay
-        current_app.logger.error(f"Erreur FedaPay: {e.response.text if e.response else e}")
+        error_msg = e.response.text if e.response else str(e)
+        current_app.logger.error(f"Erreur FedaPay: {error_msg}")
+        payout_request.status = 'failed'
+        payout_request.error_message = f"Erreur communication FedaPay: {error_msg[:200]}"
+        db.session.commit()
         return jsonify({'message': "Une erreur est survenue lors de la communication avec le service de paiement."}), 503
     except Exception as e:
         # Autres erreurs (ex: base de données)
         db.session.rollback()
-        current_app.logger.error(f"Erreur interne lors de la demande de virement: {e}", exc_info=True)
-        return jsonify({'message': 'Erreur interne du serveur.'}), 500
+        current_app.logger.error(f"Erreur lors du retrait de l'agent: {e}", exc_info=True)
+        try:
+            payout_request.status = 'failed'
+            payout_request.error_message = f"Erreur interne: {str(e)[:200]}"
+            db.session.commit()
+        except:
+            pass
+        return jsonify({'message': "Erreur interne du serveur lors du retrait."}), 500
 
 # ==============================================================================
 # NOUVELLES ROUTES POUR PERMETTRE AUX AGENTS D'AJOUTER DES BIENS IMMOBILIERS

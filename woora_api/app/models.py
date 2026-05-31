@@ -30,6 +30,12 @@ class User(db.Model):
     # Suspension logic
     is_suspended = db.Column(db.Boolean, default=False, nullable=False)
     suspension_reason = db.Column(db.Text, nullable=True)
+    banned_by_admin_id = db.Column(db.Integer, db.ForeignKey('Users.id', ondelete='SET NULL'), nullable=True)
+    suspension_attachment_url = db.Column(db.String(255), nullable=True)
+
+    # Profile completion fields (Task 24)
+    nationality = db.Column(db.String(100), nullable=True)
+    gender = db.Column(db.String(20), nullable=True)
     
     # Soft Delete
     deleted_at = db.Column(db.DateTime, nullable=True)
@@ -72,6 +78,10 @@ class User(db.Model):
             'country': self.country, 'bio': self.bio,
             'is_verified': self.is_verified,
             'is_suspended': self.is_suspended, 'suspension_reason': self.suspension_reason,
+            'banned_by_admin_id': self.banned_by_admin_id,
+            'suspension_attachment_url': self.suspension_attachment_url,
+            'nationality': self.nationality,
+            'gender': self.gender,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

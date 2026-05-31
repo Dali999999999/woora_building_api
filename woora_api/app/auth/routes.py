@@ -271,6 +271,8 @@ def update_user_profile():
     if 'country' in data: user.country = data['country']
     if 'bio' in data: user.bio = data['bio']
     if 'profile_picture_url' in data: user.profile_picture_url = data['profile_picture_url']
+    if 'nationality' in data: user.nationality = data['nationality']
+    if 'gender' in data: user.gender = data['gender']
     
     try:
         db.session.commit()
