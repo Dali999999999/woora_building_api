@@ -331,17 +331,19 @@ def update_owner_property(property_id):
         
         if 'status' in attributes_data:
             raw_status = attributes_data['status']
-            if isinstance(raw_status, int) or (isinstance(raw_status, str) and raw_status.isdigit()):
+            status_obj = None
+            if isinstance(raw_status, int) or (isinstance(raw_status, str) and str(raw_status).isdigit()):
                 status_obj = PropertyStatus.query.get(int(raw_status))
-                if status_obj:
-                    property.status_id = status_obj.id
-                    # Fallback pour la colonne legacy `status`
-                    name_to_slug = {'à vendre': 'for_sale', 'a vendre': 'for_sale', 'à louer': 'for_rent', 'a louer': 'for_rent', 'vefa': 'vefa', 'bailler': 'bailler', 'location-vente': 'location_vente', 'vendu': 'sold', 'loué': 'rented'}
-                    property.status = name_to_slug.get(status_obj.name.strip().lower(), 'for_sale')
-                else:
-                    return jsonify({'message': 'Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide défini par un entier.'}), 400
+            elif isinstance(raw_status, str):
+                status_obj = PropertyStatus.query.filter(PropertyStatus.name.ilike(raw_status.strip())).first()
+
+            if status_obj:
+                property.status_id = status_obj.id
+                # Fallback pour la colonne legacy `status`
+                name_to_slug = {'à vendre': 'for_sale', 'a vendre': 'for_sale', 'à louer': 'for_rent', 'a louer': 'for_rent', 'vefa': 'vefa', 'bailler': 'bailler', 'location-vente': 'location_vente', 'vendu': 'sold', 'loué': 'rented'}
+                property.status = name_to_slug.get(status_obj.name.strip().lower(), 'for_sale')
             else:
-                return jsonify({'message': "Statut de propriété invalide. L'usage d'identifiants (IDs) est désormais strictement requis pour le statut."}), 400            
+                return jsonify({'message': "Statut de propriété invalide ou non trouvé. Veuillez fournir un ID de statut valide ou un nom de statut valide existant."}), 400            
         if 'description' in attributes_data:
             property.description = attributes_data.get('description')
             
