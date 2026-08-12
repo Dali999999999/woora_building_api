@@ -191,7 +191,8 @@ def authenticate_user(email, password):
     if not check_password_hash(user.password_hash, password):
         raise ValueError('Mot de passe incorrect.')
 
-    # Puisque l\'utilisateur n\'est enregistré qu\'après vérification, pas besoin de is_verified ici
+    if not user.is_verified:
+        raise ValueError('Votre adresse e-mail n\'a pas encore été vérifiée. Veuillez vérifier votre compte.')
 
     access_token = create_access_token(identity=str(user.id))
     return user, access_token
