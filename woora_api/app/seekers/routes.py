@@ -415,7 +415,8 @@ def create_property_request():
         return jsonify({'message': "Veuillez renseigner au moins 50% des critères pour valider cette alerte."}), 400
     # --- FIN VALIDATION ---
 
-    country = data.get('country') or 'Sénégal'
+    user = User.query.get(current_user_id)
+    country = data.get('country') or (user.country if user else None) or (user.nationality if user else None)
 
     # 4. On crée l'objet PropertyRequest en assignant chaque valeur à la bonne colonne
     new_request = PropertyRequest(

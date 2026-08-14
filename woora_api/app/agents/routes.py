@@ -1127,7 +1127,8 @@ def create_property_for_agent():
     }
     legacy_status_slug = name_to_slug_legacy.get(status_obj.name.strip().lower(), 'for_sale')
     
-    country = dynamic_attributes.get('country') or dynamic_attributes.get('Pays') or dynamic_attributes.get('pays') or data.get('country') or 'Sénégal'
+    user = User.query.get(current_user_id)
+    country = dynamic_attributes.get('country') or dynamic_attributes.get('Pays') or dynamic_attributes.get('pays') or data.get('country') or (user.country if user else None) or (user.nationality if user else None)
 
     # L'agent crée un bien pour lui-même, donc owner_id = agent_id = current_user_id
     new_property = Property(
