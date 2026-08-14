@@ -749,7 +749,7 @@ def get_visit_settings():
     free = AppSetting.query.filter_by(setting_key='initial_free_visit_passes').first()
     price = ServiceFee.query.filter_by(service_key='visit_pass_purchase').first()
     return jsonify({
-        'initial_free_visit_passes': int(free.setting_value) if free else 0,
+        'initial_free_visit_passes': int(free.setting_value) if (free and free.setting_value and free.setting_value.isdigit()) else 3,
         'visit_pass_price': float(price.amount) if price else 0.0
     })
 

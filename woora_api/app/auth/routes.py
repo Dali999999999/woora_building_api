@@ -150,23 +150,57 @@ def logout():
     return response, 200
 
 # --- AJOUTEZ CETTE NOUVELLE FONCTION ---
-@auth_bp.route('/profile', methods=['GET'])
+@auth_bp.route('/profile', methods=['GET', 'PUT'])
 @jwt_required()
-def get_user_profile():
+def user_profile():
     """
-    Récupère les informations du profil de l'utilisateur actuellement connecté.
+    Récupère ou met à jour les informations du profil de l'utilisateur actuellement connecté.
     """
-    # Récupère l'ID de l'utilisateur depuis le token JWT
     current_user_id = get_jwt_identity()
-    
-    # Cherche l'utilisateur dans la base de données
     user = User.query.get(current_user_id)
     
     if not user:
         return jsonify({"message": "Utilisateur non trouvé."}), 404
-        
-    # Utilise la méthode to_dict() que nous avons déjà sur le modèle User
-    return jsonify(user.to_dict()), 200
+
+    if request.method == 'GET':
+        return jsonify(user.to_dict()), 200
+
+    data = request.get_json() or {}
+
+    if 'first_name' in data:
+        user.first_name = data['first_name']
+    if 'last_name' in data:
+        user.last_name = data['last_name']
+    if 'phone_number' in data:
+        user.phone_number = data['phone_number']
+    if 'profession' in data:
+        user.profession = data['profession']
+    if 'gender' in data:
+        user.gender = data['gender']
+    if 'address' in data:
+        user.address = data['address']
+    if 'city' in data:
+        user.city = data['city']
+    if 'profile_picture_url' in data:
+        user.profile_picture_url = data['profile_picture_url']
+    if 'nationality' in data:
+        user.nationality = data['nationality']
+    if 'country' in data:
+        user.country = data['country']
+
+    # Synchroniser country et nationality si l'un des deux est vide
+    if user.nationality and not user.country:
+        user.country = user.nationality
+    elif user.country and not user.nationality:
+        user.nationality = user.country
+
+    try:
+        db.session.commit()
+        return jsonify({'message': 'Profil mis à jour avec succès.', 'user': user.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur mise à jour profil: {e}")
+        return jsonify({'message': 'Erreur lors de la mise à jour du profil.'}), 500
 
 @auth_bp.route('/forgot-password', methods=['POST'])
 @limiter.limit("3 per hour")  # Security: Prevent password reset spam

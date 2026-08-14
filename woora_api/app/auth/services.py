@@ -27,6 +27,19 @@ def send_verification_email(email, code):
         current_app.logger.error(f'Erreur lors de l\'envoi de l\'e-mail à {email}: {e}')
         return False
 
+def get_initial_free_visit_passes():
+    """
+    Récupère le nombre de pass de visite gratuits configuré dans le panneau admin.
+    Fallback à 3 si le paramètre n'existe pas encore en DB.
+    """
+    try:
+        free_passes_setting = AppSetting.query.filter_by(setting_key='initial_free_visit_passes').first()
+        if free_passes_setting and free_passes_setting.setting_value is not None:
+            return int(str(free_passes_setting.setting_value).strip())
+    except (ValueError, TypeError) as e:
+        current_app.logger.warning(f"Erreur parsing initial_free_visit_passes: {e}")
+    return 3
+
 def register_user_initiate(email, password, first_name, last_name, phone_number, role, nationality=None, country=None):
     user = User.query.filter_by(email=email).first()
     
@@ -61,6 +74,9 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
     verification_code = generate_verification_code()
     expires_at = datetime.utcnow() + timedelta(minutes=10)
 
+    # Récupérer les pass gratuits attribués à l'inscription (Client ou Agent)
+    initial_passes = get_initial_free_visit_passes() if role in ['customer', 'seeker', 'agent'] else 0
+
     # Si l'utilisateur existe mais n'est pas vérifié, on met à jour ses infos
     if user and not user.is_verified:
         user.password_hash = hashed_password
@@ -68,6 +84,7 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
         user.last_name = last_name
         user.phone_number = phone_number
         user.role = role
+        user.visit_passes = initial_passes
         if nationality: user.nationality = nationality
         if country or nationality: user.country = country or nationality
     else:
@@ -79,6 +96,7 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
             last_name=last_name,
             phone_number=phone_number,
             role=role,
+            visit_passes=initial_passes,
             nationality=nationality,
             country=country or nationality,
             is_verified=False
@@ -90,8 +108,6 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
     user.verification_code_expires = expires_at
 
     db.session.commit()
-
-    # Envoyer l'e-mail de vérification
 
     # Envoyer l'e-mail de vérification
     if not send_verification_email(email, verification_code):
@@ -162,10 +178,10 @@ def verify_email_and_register(email, code):
     user.is_verified = True
     
     # --- Logique d'attribution des pass de visite gratuits ---
-    if user.role == 'customer':
-        free_passes_setting = AppSetting.query.filter_by(setting_key='initial_free_visit_passes').first()
-        if free_passes_setting:
-            user.visit_passes = int(free_passes_setting.setting_value)
+    if user.role in ['customer', 'seeker', 'agent']:
+        initial_passes = get_initial_free_visit_passes()
+        if initial_passes > 0 and user.visit_passes == 0:
+            user.visit_passes = initial_passes
     # --- Fin de la logique ---
 
     db.session.commit()
