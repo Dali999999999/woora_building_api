@@ -330,9 +330,15 @@ def get_users():
     limit = request.args.get('limit', 20, type=int)
     search_term = request.args.get('search', '').strip()
     role_filter = request.args.get('role', 'all')
+    status_filter = request.args.get('status', 'active') # 'active', 'archived', 'all'
     
-    # Construction de la requête de base (EXCLURE LES SUPPRIMÉS)
-    query = User.query.filter(User.deleted_at == None)
+    # Construction de la requête de base selon le statut (actifs ou archivés)
+    if status_filter == 'archived':
+        query = User.query.filter(User.deleted_at != None)
+    elif status_filter == 'all':
+        query = User.query
+    else:
+        query = User.query.filter(User.deleted_at == None)
     
     # Filtrage par recherche (Nom, Prénom, Email)
     if search_term:
@@ -376,7 +382,7 @@ from app.utils.email_utils import send_alert_match_email, send_account_deletion_
 @jwt_required()
 def delete_user(user_id):
     """
-    Soft delete user: Mark user as deleted but keep data.
+    Archivage de l'utilisateur et de ses annonces.
     """
     current_user_id = get_jwt_identity()
     admin = User.query.get(current_user_id)
@@ -385,32 +391,64 @@ def delete_user(user_id):
 
     user = User.query.get_or_404(user_id)
     
-    # Get Reason if provided
     data = request.json or {} 
     reason = data.get('reason')
 
     user.deleted_at = datetime.utcnow()
     user.deletion_reason = reason
     
-    # FIX: Anonymiser l'email pour libérer la contrainte d'unicité
-    # Cela permet à l'utilisateur de se réinscrire avec le même email plus tard
+    # Anonymiser l'email pour libérer la contrainte d'unicité (réinscription possible)
     original_email = user.email
-    user.email = f"deleted_{int(datetime.utcnow().timestamp())}_{original_email}"
+    if not original_email.startswith('deleted_'):
+        user.email = f"deleted_{int(datetime.utcnow().timestamp())}_{original_email}"
 
-    # FIX: Cascade Soft Delete -> Supprimer (soft) tous les biens de cet utilisateur
-    # On ne veut pas de biens orphelins "actifs" appartenant à un utilisateur supprimé
+    # Cascade Archivage -> Masquer les biens de cet utilisateur
     user_properties = Property.query.filter_by(owner_id=user.id).all()
     for prop in user_properties:
-        if not prop.deleted_at: # Ne pas écraser si déjà supprimé
+        if not prop.deleted_at:
             prop.deleted_at = datetime.utcnow()
-            prop.deletion_reason = f"Cascade: Propriétaire ({original_email}) supprimé par admin."
+            prop.deletion_reason = f"Cascade: Compte propriétaire ({original_email}) archivé par admin."
     
     db.session.commit()
     
-    # Send Notification (using original email)
+    # Notification
     send_account_deletion_email(original_email, user.first_name, reason)
 
-    return jsonify({'message': 'Utilisateur supprimé (Soft Delete) avec succès. Email anonymisé et biens supprimés.'}), 200
+    return jsonify({'message': 'Utilisateur archivé avec succès. Ses annonces ont été masquées.'}), 200
+
+@admin_bp.route('/users/<int:user_id>/restore', methods=['POST', 'PUT'])
+@jwt_required()
+def restore_user(user_id):
+    """
+    Restaure un utilisateur archivé et ses annonces associées.
+    """
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    user = User.query.get_or_404(user_id)
+    if not user.deleted_at:
+        return jsonify({'message': 'Cet utilisateur est déjà actif.'}), 400
+
+    # Restaurer l'email original si préfixé
+    if user.email.startswith('deleted_'):
+        parts = user.email.split('_', 2)
+        if len(parts) >= 3:
+            user.email = parts[2]
+
+    user.deleted_at = None
+    user.deletion_reason = None
+
+    # Restaurer les biens de cet utilisateur
+    user_properties = Property.query.filter_by(owner_id=user.id).all()
+    for prop in user_properties:
+        if prop.deleted_at:
+            prop.deleted_at = None
+            prop.deletion_reason = None
+
+    db.session.commit()
+    return jsonify({'message': 'Utilisateur et ses annonces restaurés avec succès.'}), 200
 
 # ------------- PROPRIÉTÉS -------------
 @admin_bp.route('/properties', methods=['GET'])
@@ -565,23 +603,66 @@ def delete_property_admin(property_id):
     for visit in pending_visits:
         visit.status = 'rejected'
         visit.message = f"Bien supprimé par l'administrateur. Raison: {reason}"
-        
-        # Notify seeker
-        customer = User.query.get(visit.customer_id)
-        if customer:
-            from app.utils.email_utils import send_admin_rejection_notification
-            send_admin_rejection_notification(customer.email, prop.title, visit.message)
 
     db.session.commit()
     
     # Notify Owner
     owner = User.query.get(prop.owner_id)
     if owner:
-        # We can reuse invalidation email or create a new one. Using invalidation for now as it conveys "removed".
         send_property_invalidation_email(owner.email, prop.title, f"Votre bien a été supprimé par l'administration. Raison: {reason}")
 
-    return jsonify({'message': 'Bien immobilier supprimé (Soft Delete) avec succès.'}), 200
+    return jsonify({'message': f"Bien '{prop.title}' supprimé avec succès."}), 200
 
+@admin_bp.route('/properties/<int:property_id>/restore', methods=['POST', 'PUT'])
+@jwt_required()
+def restore_property_admin(property_id):
+    """
+    Restaure une propriété supprimée / mise à la corbeille.
+    """
+    current_user_id = get_jwt_identity()
+    admin = User.query.get(current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    prop = Property.query.get_or_404(property_id)
+    if not prop.deleted_at:
+        return jsonify({'message': 'Ce bien est déjà actif.'}), 400
+
+    prop.deleted_at = None
+    prop.deletion_reason = None
+    db.session.commit()
+    return jsonify({'message': f"Bien '{prop.title}' restauré avec succès."}), 200
+
+@admin_bp.route('/trash/properties', methods=['GET'])
+def get_deleted_properties():
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    search_query = request.args.get('search', '').strip()
+
+    query = Property.query.filter(Property.deleted_at != None).options(selectinload(Property.owner))
+
+    if search_query:
+        words = search_query.split()
+        for word in words:
+            term = f"%{word}%"
+            query = query.filter(
+                db.or_(
+                    Property.title.ilike(term),
+                    Property.city.ilike(term),
+                    Property.address.ilike(term)
+                )
+            )
+
+    query = query.order_by(Property.deleted_at.desc())
+    pagination = query.paginate(page=page, per_page=limit, error_out=False)
+
+    return jsonify({
+        'properties': [p.to_dict() for p in pagination.items],
+        'total': pagination.total,
+        'page': page,
+        'limit': limit,
+        'pages': pagination.pages
+    })
 # ------------- TYPES DE PROPRIÉTÉ -------------
 @admin_bp.route('/property_types', methods=['GET'])
 def get_property_types():
