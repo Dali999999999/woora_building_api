@@ -248,6 +248,7 @@ class Property(db.Model):
     price = db.Column(db.Numeric(20, 2), nullable=False)
     address = db.Column(db.String(255))
     city = db.Column(db.String(100))
+    country = db.Column(db.String(100), default='Sénégal')
     postal_code = db.Column(db.String(20))
     latitude = db.Column(db.Numeric(9, 6))
     longitude = db.Column(db.Numeric(9, 6))
@@ -296,7 +297,7 @@ class Property(db.Model):
             'share_link': f"https://goods.wooraentreprises.com/p/{self.share_uid}" if self.share_uid else None,
             'status': status_data, # Renvoie maintenant un OBJET complet {id, name, color}
             'price': float(self.price) if self.price is not None else None,
-            'address': self.address, 'city': self.city, 'postal_code': self.postal_code,
+            'address': self.address, 'city': self.city, 'country': self.country or 'Sénégal', 'postal_code': self.postal_code,
             'latitude': float(self.latitude) if self.latitude is not None else None,
             'longitude': float(self.longitude) if self.longitude is not None else None,
             'is_validated': self.is_validated,
@@ -476,6 +477,7 @@ class PropertyRequest(db.Model):
     property_type_id = db.Column(db.Integer, db.ForeignKey('PropertyTypes.id', ondelete='SET NULL'))
     request_details = db.Column(db.Text)
     city = db.Column(db.String(100))
+    country = db.Column(db.String(100), default='Sénégal')
     min_price = db.Column(db.Numeric(12, 2))
     max_price = db.Column(db.Numeric(12, 2))
     preferred_status = db.Column(db.String(50)) # e.g., 'for_sale', 'for_rent'
@@ -523,6 +525,7 @@ class PropertyRequest(db.Model):
             'property_type_id': self.property_type_id,
             'property_type_name': self.property_type.name if self.property_type else "Tous types",
             'city': self.city,
+            'country': self.country or 'Sénégal',
             'min_price': float(self.min_price) if self.min_price is not None else None,
             'max_price': float(self.max_price) if self.max_price is not None else None,
             'preferred_status': self.preferred_status,

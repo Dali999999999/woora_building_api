@@ -165,7 +165,7 @@ def create_property():
         'vendu': 'sold',
         'loué': 'rented'
     }
-    legacy_status_slug = name_to_slug_legacy.get(status_obj.name.strip().lower(), 'for_sale')
+    country = dynamic_attributes.get('country') or dynamic_attributes.get('Pays') or dynamic_attributes.get('pays') or data.get('country') or 'Sénégal'
 
     new_property = Property(
         owner_id=current_user_id,
@@ -177,6 +177,7 @@ def create_property():
         price=price,
         address=address,
         city=city,
+        country=country,
         postal_code=postal_code,
         latitude=latitude,
         longitude=longitude

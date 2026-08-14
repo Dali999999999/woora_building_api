@@ -29,12 +29,14 @@ def register():
     last_name = data.get('last_name')
     phone_number = data.get('phone_number')
     role = data.get('role')
+    nationality = data.get('nationality')
+    country = data.get('country') or nationality
 
     if not all([email, password, first_name, last_name, phone_number, role]):
         return jsonify({'message': 'Tous les champs sont requis.'}), 400
 
     try:
-        auth_services.register_user_initiate(email, password, first_name, last_name, phone_number, role)
+        auth_services.register_user_initiate(email, password, first_name, last_name, phone_number, role, nationality=nationality, country=country)
         return jsonify({'message': 'Inscription initiée. Un code de vérification a été envoyé à votre adresse e-mail.'}), 200
     except ValueError as e:
         return jsonify({'message': str(e)}), 409 # Conflict

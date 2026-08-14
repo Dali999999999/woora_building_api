@@ -27,33 +27,25 @@ def send_verification_email(email, code):
         current_app.logger.error(f'Erreur lors de l\'envoi de l\'e-mail à {email}: {e}')
         return False
 
-def register_user_initiate(email, password, first_name, last_name, phone_number, role):
+def register_user_initiate(email, password, first_name, last_name, phone_number, role, nationality=None, country=None):
     user = User.query.filter_by(email=email).first()
     
     # 1. GESTION DU SOFT DELETE : Libérer l'email si l'utilisateur est supprimé
     if user and user.deleted_at is not None:
         import time
         timestamp = int(time.time())
-        # On anonymise l'ancien compte pour permettre la réinscription
-        # On garde une trace pour l'admin
         anonymized_email = f"{user.email}.del.{timestamp}"
         
-        # S'assurer que ça ne dépasse pas 191 chars
         if len(anonymized_email) > 190:
             anonymized_email = f"del.{timestamp}.{user.id}@woora.deleted"
 
         current_app.logger.info(f"Anonymisation du compte supprimé {user.id} ({user.email}) -> {anonymized_email}")
         user.email = anonymized_email
         
-        # On libère aussi le numéro de téléphone au cas où (pour éviter confusion)
         if user.phone_number:
-            # Correction: Le champ phone_number est VARCHAR(20), on ne peut pas append trop de texte
-            # On remplace par un marqueur court "del_" + timestamp (ex: del_1700000000 = 14 chars)
             user.phone_number = f"del_{timestamp}"
 
         db.session.commit()
-        
-        # On considère maintenant que l'utilisateur n'existe plus pour la suite de la logique
         user = None
 
     if user and user.is_verified:
@@ -76,7 +68,8 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
         user.last_name = last_name
         user.phone_number = phone_number
         user.role = role
-        # On ne touche pas à visit_passes ici, on le fait à la vérification ou création
+        if nationality: user.nationality = nationality
+        if country or nationality: user.country = country or nationality
     else:
         # Création du nouvel utilisateur (non vérifié par défaut)
         user = User(
@@ -86,6 +79,8 @@ def register_user_initiate(email, password, first_name, last_name, phone_number,
             last_name=last_name,
             phone_number=phone_number,
             role=role,
+            nationality=nationality,
+            country=country or nationality,
             is_verified=False
         )
         db.session.add(user)

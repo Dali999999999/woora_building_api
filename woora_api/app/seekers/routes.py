@@ -57,6 +57,11 @@ def get_all_properties_for_seeker():
         # Comportement par défaut : Vente et Location
         base_query = base_query.filter(Property.status.in_(['for_sale', 'for_rent']))
 
+    # --- 1.2 Filtre par Pays ---
+    country_param = request.args.get('country', '').strip()
+    if country_param and country_param.lower() != 'all' and country_param != 'null':
+        base_query = base_query.filter(func.lower(Property.country) == country_param.lower())
+
     # --- 2. Filtres "Durs" (Exclusion) ---
     # Ces filtres éliminent les résultats qui ne correspondent PAS.
     
@@ -410,12 +415,15 @@ def create_property_request():
         return jsonify({'message': "Veuillez renseigner au moins 50% des critères pour valider cette alerte."}), 400
     # --- FIN VALIDATION ---
 
+    country = data.get('country') or 'Sénégal'
+
     # 4. On crée l'objet PropertyRequest en assignant chaque valeur à la bonne colonne
     new_request = PropertyRequest(
         customer_id=current_user_id,
         property_type_id=data.get('property_type_id'), # Vient du niveau supérieur du JSON
         
         city=city,
+        country=country,
         min_price=min_price,
         max_price=max_price,
         preferred_status=preferred_status,

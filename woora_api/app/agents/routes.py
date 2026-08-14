@@ -1126,6 +1126,8 @@ def create_property_for_agent():
         'loué': 'rented'
     }
     legacy_status_slug = name_to_slug_legacy.get(status_obj.name.strip().lower(), 'for_sale')
+    
+    country = dynamic_attributes.get('country') or dynamic_attributes.get('Pays') or dynamic_attributes.get('pays') or data.get('country') or 'Sénégal'
 
     # L'agent crée un bien pour lui-même, donc owner_id = agent_id = current_user_id
     new_property = Property(
@@ -1139,6 +1141,7 @@ def create_property_for_agent():
         price=price,
         address=address,
         city=city,
+        country=country,
         postal_code=postal_code,
         latitude=latitude,
         longitude=longitude,
