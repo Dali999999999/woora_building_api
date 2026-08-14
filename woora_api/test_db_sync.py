@@ -1,10 +1,12 @@
 # test_db_sync.py
 import sys
 import os
-from dotenv import load_dotenv
-
-basedir = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(basedir, '.env'))
+try:
+    from dotenv import load_dotenv
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    load_dotenv(os.path.join(basedir, '.env'))
+except ImportError:
+    pass
 
 from app import create_app, db
 from app.models import (
