@@ -1591,6 +1591,7 @@ def get_all_visit_requests_admin():
                     'id': vr.referral.id,
                     'code': vr.referral.referral_code,
                     'agent_name': f"{vr.referral.agent.first_name} {vr.referral.agent.last_name}" if vr.referral.agent else "Inconnu",
+                    'agent_phone': vr.referral.agent.phone_number if vr.referral.agent and vr.referral.agent.phone_number else None,
                     'agent_email': vr.referral.agent.email if vr.referral.agent else None
                 } if vr.referral else None
             })
