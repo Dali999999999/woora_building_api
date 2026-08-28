@@ -1465,3 +1465,125 @@ def check_publication_limit_route():
         return jsonify({'can_publish': True}), 200
     else:
         return jsonify({'can_publish': False, 'message': "Vous avez atteint votre limite de publications."}), 403
+
+# ------------------------------------------------------------------
+# ALERTES / PROPERTY REQUESTS POUR AGENTS
+# ------------------------------------------------------------------
+@agents_bp.route('/property-requests', methods=['POST'])
+@jwt_required()
+def create_agent_property_request():
+    """
+    Permet à un agent de soumettre une alerte / recherche de bien.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': "Accès refusé."}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'message': "Données manquantes."}), 400
+
+    request_details_str = data.get('request_details', '{}')
+    try:
+        request_values = json.loads(request_details_str)
+    except json.JSONDecodeError:
+        return jsonify({'message': "Le format des détails de la requête est invalide."}), 400
+
+    city = request_values.get('city') or data.get('city')
+    preferred_status = request_values.get('status') or data.get('preferred_status') or data.get('status')
+
+    min_price_raw = request_values.get('min_price') if request_values.get('min_price') is not None else data.get('min_price')
+    max_price_raw = request_values.get('max_price') if request_values.get('max_price') is not None else data.get('max_price')
+
+    min_price = None
+    if min_price_raw is not None and str(min_price_raw).strip() != '':
+        try:
+            min_price = float(str(min_price_raw).replace(' ', '').replace(',', '.'))
+        except (ValueError, TypeError):
+            min_price = None
+
+    max_price = None
+    if max_price_raw is not None and str(max_price_raw).strip() != '':
+        try:
+            max_price = float(str(max_price_raw).replace(' ', '').replace(',', '.'))
+        except (ValueError, TypeError):
+            max_price = None
+
+    total_fields = 2
+    filled_fields = 0
+    if city: filled_fields += 1
+    if min_price is not None or max_price is not None: filled_fields += 1
+
+    for key, val in request_values.items():
+        if key not in ['city', 'min_price', 'max_price', 'status', 'preferred_status']:
+            total_fields += 1
+            if val is not None and str(val).strip() != '':
+                filled_fields += 1
+
+    completion_ratio = filled_fields / max(1, total_fields)
+    if completion_ratio < 0.5:
+        return jsonify({'message': "Veuillez renseigner au moins 50% des critères pour valider cette alerte."}), 400
+
+    country = data.get('country') or agent.country or agent.nationality
+
+    new_request = PropertyRequest(
+        customer_id=current_user_id,
+        property_type_id=data.get('property_type_id'),
+        city=city,
+        country=country,
+        min_price=min_price,
+        max_price=max_price,
+        preferred_status=preferred_status,
+        request_details=request_details_str,
+        status='new'
+    )
+
+    try:
+        db.session.add(new_request)
+        db.session.commit()
+
+        from app.utils.matching_utils import find_matches_for_request
+        try:
+            find_matches_for_request(new_request.id)
+        except Exception as e:
+            current_app.logger.error(f"Error triggering matching for agent request {new_request.id}: {e}")
+
+        return jsonify({'message': "Votre alerte agent a bien été enregistrée.", 'request': new_request.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur création alerte agent: {e}", exc_info=True)
+        return jsonify({'message': "Erreur interne du serveur."}), 500
+
+@agents_bp.route('/property-requests', methods=['GET'])
+@jwt_required()
+def get_agent_property_requests():
+    """
+    Récupère l'historique des alertes créées par l'agent.
+    """
+    current_user_id = get_jwt_identity()
+    agent = User.query.get(current_user_id)
+    if not agent or agent.role != 'agent':
+        return jsonify({'message': 'Accès refusé.'}), 403
+
+    requests = PropertyRequest.query.filter_by(customer_id=current_user_id).order_by(PropertyRequest.created_at.desc()).all()
+    return jsonify([req.to_dict() for req in requests]), 200
+
+@agents_bp.route('/property-requests/<int:request_id>', methods=['DELETE'])
+@jwt_required()
+def delete_agent_property_request(request_id):
+    """
+    Permet à un agent de supprimer son alerte.
+    """
+    current_user_id = get_jwt_identity()
+    req_obj = PropertyRequest.query.filter_by(id=request_id, customer_id=current_user_id).first()
+    if not req_obj:
+        return jsonify({'message': 'Alerte non trouvée.'}), 404
+
+    try:
+        db.session.delete(req_obj)
+        db.session.commit()
+        return jsonify({'message': 'Alerte supprimée avec succès.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Erreur lors de la suppression: {e}'}), 500

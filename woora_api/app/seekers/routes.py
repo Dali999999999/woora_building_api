@@ -372,7 +372,7 @@ def create_property_request():
     current_user_id = get_jwt_identity()
     customer = User.query.get(current_user_id)
 
-    if not customer or customer.role != 'customer':
+    if not customer or customer.role not in ['customer', 'agent']:
         return jsonify({'message': "Accès refusé."}), 403
 
     data = request.get_json()
@@ -390,21 +390,35 @@ def create_property_request():
         return jsonify({'message': "Le format des détails de la requête est invalide."}), 400
 
     # 3. On extrait les valeurs pour les colonnes structurées
-    # On utilise .get() pour récupérer les valeurs sans causer d'erreur si elles sont absentes
-    city = request_values.get('city')
-    min_price = request_values.get('min_price')
-    max_price = request_values.get('max_price')
-    preferred_status = request_values.get('status') # This is sent as 'status' inside request_details by Flutter
+    city = request_values.get('city') or data.get('city')
+    preferred_status = request_values.get('status') or data.get('preferred_status') or data.get('status')
+
+    min_price_raw = request_values.get('min_price') if request_values.get('min_price') is not None else data.get('min_price')
+    max_price_raw = request_values.get('max_price') if request_values.get('max_price') is not None else data.get('max_price')
+
+    min_price = None
+    if min_price_raw is not None and str(min_price_raw).strip() != '':
+        try:
+            min_price = float(str(min_price_raw).replace(' ', '').replace(',', '.'))
+        except (ValueError, TypeError):
+            min_price = None
+
+    max_price = None
+    if max_price_raw is not None and str(max_price_raw).strip() != '':
+        try:
+            max_price = float(str(max_price_raw).replace(' ', '').replace(',', '.'))
+        except (ValueError, TypeError):
+            max_price = None
 
     # --- NOUVEAU : Validation 50% Remplissage ---
     total_fields = 2 # Ville, Prix (on compte la fourchette comme 1 champ logique)
     filled_fields = 0
     
     if city: filled_fields += 1
-    if min_price or max_price: filled_fields += 1
+    if min_price is not None or max_price is not None: filled_fields += 1
     
     for key, val in request_values.items():
-        if key not in ['city', 'min_price', 'max_price']:
+        if key not in ['city', 'min_price', 'max_price', 'status', 'preferred_status']:
             total_fields += 1
             if val is not None and str(val).strip() != '':
                  filled_fields += 1
@@ -462,7 +476,7 @@ def get_seeker_property_requests():
     current_user_id = get_jwt_identity()
     customer = User.query.get(current_user_id)
 
-    if not customer or customer.role != 'customer':
+    if not customer or customer.role not in ['customer', 'agent']:
         return jsonify({'message': 'Accès refusé.'}), 403
 
     # On récupère TOUTES les demandes du client (historique complet), les plus récentes en premier
