@@ -90,7 +90,6 @@ def get_all_properties_for_seeker():
             radius_val = float(radius_param)
             
             # Formule de Haversine en SQL Alchemy
-            from sqlalchemy import func
             distance = 6371 * func.acos(
                 func.cos(func.radians(lat_val)) * 
                 func.cos(func.radians(Property.latitude)) * 
@@ -499,10 +498,15 @@ def delete_property_request(request_id):
         return jsonify({'message': "Alerte non trouvée ou accès refusé."}), 404
         
     try:
-        # Option 1: Suppression définitive (Hard Delete)
-        # db.session.delete(req)
-        
-        # Option 2: Fermeture (Soft Delete / Status Update) - Préférable pour l'historique
+        # Marquer tous les matches de cette alerte comme lus
+        # pour que le badge reparte à 0 correctement
+        from app.models import PropertyRequestMatch
+        PropertyRequestMatch.query.filter_by(
+            property_request_id=req.id,
+            is_read=False
+        ).update({'is_read': True})
+
+        # Soft Delete
         req.status = 'closed'
         req.archived_at = datetime.utcnow()
         req.archived_by = current_user_id
@@ -514,6 +518,39 @@ def delete_property_request(request_id):
         db.session.rollback()
         current_app.logger.error(f"Erreur suppression alerte: {e}")
         return jsonify({'message': "Erreur serveur."}), 500
+
+@seekers_bp.route('/alerts/mark-read', methods=['POST'])
+@jwt_required()
+def mark_alerts_as_read():
+    """
+    Marque tous les matches non lus de l'utilisateur comme lus.
+    Appelé quand l'utilisateur ouvre l'onglet Alertes, pour remettre le badge à 0.
+    """
+    current_user_id = get_jwt_identity()
+    
+    try:
+        from app.models import PropertyRequestMatch
+        # Récupérer les IDs des alertes de l'utilisateur
+        user_request_ids = [
+            req.id for req in PropertyRequest.query.filter_by(
+                customer_id=current_user_id
+            ).all()
+        ]
+        
+        if user_request_ids:
+            PropertyRequestMatch.query.filter(
+                PropertyRequestMatch.property_request_id.in_(user_request_ids),
+                PropertyRequestMatch.is_read == False
+            ).update({'is_read': True}, synchronize_session='fetch')
+            db.session.commit()
+        
+        return jsonify({'message': 'Alertes marquées comme lues.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur mark-alerts-read: {e}")
+        return jsonify({'message': 'Erreur serveur.'}), 500
+
 
 # ===================================================================
 # GESTION DES FAVORIS
